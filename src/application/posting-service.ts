@@ -230,17 +230,14 @@ export async function postLedgerEntry(
     });
 
     const occurredAtDate = toDate(input.occurredAt) ?? new Date();
-    let periodMonthDate: Date | null = null;
-    let memberId: string | null = null;
-
-    if (input.kind === 'contribution') {
-      periodMonthDate =
-        toDateOnly(input.periodMonth) ?? toDateOnly(occurredAtDate);
-      memberId = input.memberId ?? input.actorMemberId;
-    } else {
-      periodMonthDate = null;
-      memberId = input.memberId ?? null;
-    }
+    const periodMonthDate =
+      input.kind === 'contribution'
+        ? (toDateOnly(input.periodMonth) ?? toDateOnly(occurredAtDate))
+        : null;
+    const memberId =
+      input.kind === 'contribution'
+        ? (input.memberId ?? input.actorMemberId)
+        : (input.memberId ?? null);
 
     // 6. Insert new ledger row (identity column assigns seq)
     const newId = generateId();
