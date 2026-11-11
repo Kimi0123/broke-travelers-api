@@ -1,7 +1,8 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// Prisma Schema for Broke Travelers API
+// Implements entities from docs/schema.md with strict relational integrity.
+//
+// NOTE: Partial unique indexes, CHECK constraints, append-only triggers,
+// and the v_activity_items view are managed via raw SQL migrations in Step 3.
 
 generator client {
   provider = "prisma-client-js"
@@ -9,4 +10,262 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+model User {
+  id          String   @id @db.Uuid
+  firebaseUid String   @unique @map("firebase_uid") @db.VarChar(128)
+  email       String   @map("email") @db.VarChar(255)
+  displayName String   @map("display_name") @db.VarChar(100)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  createdGroups       Group[]           @relation("GroupCreatedBy")
+  memberships         GroupMembership[]
+  acceptedInvitations Invitation[]      @relation("InvitationAcceptedBy")
+  auditLogs           AuditLog[]
+  idempotencyKeys     IdempotencyKey[]
+  updateReads         UserUpdateRead[]
+
+  @@map("users")
+}
+
+model Group {
+  id              String   @id @db.Uuid
+  name            String   @map("name") @db.VarChar(60)
+  expectedPaisa   BigInt   @map("expected_paisa") @db.BigInt
+  dueDay          Int      @map("due_day") @db.SmallInt
+  createdByUserId String   @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  createdByUser       User                 @relation("GroupCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  memberships         GroupMembership[]
+  invitations         Invitation[]
+  paymentSubmissions  PaymentSubmission[]
+  ledgerEntries       LedgerEntry[]
+  approvalRequests    ApprovalRequest[]
+  bankReconciliations BankReconciliation[]
+  auditLogs           AuditLog[]
+  idempotencyKeys     IdempotencyKey[]
+  updateReads         UserUpdateRead[]
+
+  @@map("groups")
+}
+
+model GroupMembership {
+  id          String    @id @db.Uuid
+  groupId     String    @map("group_id") @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  isOwner     Boolean   @default(false) @map("is_owner")
+  isTreasurer Boolean   @default(false) @map("is_treasurer")
+  joinedAt    DateTime  @default(now()) @map("joined_at") @db.Timestamptz
+  leftAt      DateTime? @map("left_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  createdInvitations         Invitation[]             @relation("InvitationCreatedBy")
+  paymentSubmissions         PaymentSubmission[]      @relation("SubmissionMember")
+  reviewedSubmissions        PaymentSubmission[]      @relation("SubmissionReviewedBy")
+  contributionLedgerEntries  LedgerEntry[]            @relation("LedgerEntryMember")
+  actedLedgerEntries         LedgerEntry[]            @relation("LedgerEntryActor")
+  requestedApprovals         ApprovalRequest[]        @relation("ApprovalRequestedBy")
+  executedApprovals          ApprovalRequest[]        @relation("ApprovalExecutedBy")
+  eligibleVoters             ApprovalEligibleVoter[]
+  votes                      ApprovalVote[]
+  bankReconciliations        BankReconciliation[]
+
+  @@index([groupId, leftAt])
+  @@map("group_memberships")
+}
+
+model Invitation {
+  id                  String    @id @db.Uuid
+  groupId             String    @map("group_id") @db.Uuid
+  code                String    @unique @map("code") @db.VarChar(8)
+  status              String    @default("pending") @map("status") @db.VarChar(20)
+  createdByMemberId   String    @map("created_by_member_id") @db.Uuid
+  acceptedByUserId    String?   @map("accepted_by_user_id") @db.Uuid
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  expiresAt           DateTime  @map("expires_at") @db.Timestamptz
+
+  group           Group           @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  createdByMember GroupMembership @relation("InvitationCreatedBy", fields: [createdByMemberId], references: [id], onDelete: Restrict)
+  acceptedByUser  User?           @relation("InvitationAcceptedBy", fields: [acceptedByUserId], references: [id], onDelete: Restrict)
+
+  @@map("invitations")
+}
+
+model PaymentSubmission {
+  id                  String    @id @db.Uuid
+  seq                 BigInt    @default(autoincrement()) @map("seq") @db.BigInt
+  groupId             String    @map("group_id") @db.Uuid
+  memberId            String    @map("member_id") @db.Uuid
+  periodMonth         DateTime  @map("period_month") @db.Date
+  amountPaisa         BigInt    @map("amount_paisa") @db.BigInt
+  paymentMethod       String    @map("payment_method") @db.VarChar(20)
+  reference           String?   @map("reference") @db.VarChar(100)
+  note                String?   @map("note") @db.VarChar(200)
+  status              String    @default("pending") @map("status") @db.VarChar(30)
+  submittedAt         DateTime  @default(now()) @map("submitted_at") @db.Timestamptz
+  reviewedByMemberId  String?   @map("reviewed_by_member_id") @db.Uuid
+  reviewedAt          DateTime? @map("reviewed_at") @db.Timestamptz
+  rejectionReason     String?   @map("rejection_reason") @db.VarChar(30)
+  rejectionNote       String?   @map("rejection_note") @db.VarChar(200)
+  postedLedgerEntryId String?   @unique @map("posted_ledger_entry_id") @db.Uuid
+
+  group            Group            @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  member           GroupMembership  @relation("SubmissionMember", fields: [memberId], references: [id], onDelete: Restrict)
+  reviewedByMember GroupMembership? @relation("SubmissionReviewedBy", fields: [reviewedByMemberId], references: [id], onDelete: Restrict)
+  postedLedgerEntry LedgerEntry?    @relation("SubmissionPostedLedgerEntry", fields: [postedLedgerEntryId], references: [id], onDelete: Restrict)
+
+  @@index([groupId, memberId, periodMonth, submittedAt(sort: Desc)])
+  @@map("payment_submissions")
+}
+
+model LedgerEntry {
+  id              String    @id @db.Uuid
+  seq             BigInt    @default(autoincrement()) @map("seq") @db.BigInt
+  groupId         String    @map("group_id") @db.Uuid
+  kind            String    @map("kind") @db.VarChar(20)
+  title           String    @map("title") @db.VarChar(60)
+  magnitudePaisa  BigInt    @map("magnitude_paisa") @db.BigInt
+  occurredAt      DateTime  @map("occurred_at") @db.Timestamptz
+  postedAt        DateTime  @default(now()) @map("posted_at") @db.Timestamptz
+  memberId        String?   @map("member_id") @db.Uuid
+  periodMonth     DateTime? @map("period_month") @db.Date
+  paymentMethod   String?   @map("payment_method") @db.VarChar(20)
+  note            String?   @map("note") @db.VarChar(200)
+  reversesEntryId String?   @unique @map("reverses_entry_id") @db.Uuid
+  actorMemberId   String    @map("actor_member_id") @db.Uuid
+
+  group         Group            @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  member        GroupMembership? @relation("LedgerEntryMember", fields: [memberId], references: [id], onDelete: Restrict)
+  actorMember   GroupMembership  @relation("LedgerEntryActor", fields: [actorMemberId], references: [id], onDelete: Restrict)
+  reversesEntry LedgerEntry?     @relation("LedgerEntryReversal", fields: [reversesEntryId], references: [id], onDelete: Restrict)
+  reversedBy    LedgerEntry?     @relation("LedgerEntryReversal")
+
+  originSubmission   PaymentSubmission? @relation("SubmissionPostedLedgerEntry")
+  executedApprovals  ApprovalRequest[]  @relation("ApprovalExecutedEntry")
+
+  @@index([groupId, occurredAt(sort: Desc)])
+  @@map("ledger_entries")
+}
+
+model ApprovalRequest {
+  id                 String    @id @db.Uuid
+  groupId            String    @map("group_id") @db.Uuid
+  kind               String    @map("kind") @db.VarChar(20)
+  requesterMemberId  String    @map("requester_member_id") @db.Uuid
+  title              String    @map("title") @db.VarChar(60)
+  payee              String    @map("payee") @db.VarChar(60)
+  description        String?   @map("description") @db.VarChar(200)
+  amountPaisa        BigInt    @map("amount_paisa") @db.BigInt
+  status             String    @default("open") @map("status") @db.VarChar(20)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  expiresAt          DateTime  @map("expires_at") @db.Timestamptz
+  closedAt           DateTime? @map("closed_at") @db.Timestamptz
+  executedEntryId    String?   @unique @map("executed_entry_id") @db.Uuid
+  executedByMemberId String?   @map("executed_by_member_id") @db.Uuid
+
+  group            Group            @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  requesterMember  GroupMembership  @relation("ApprovalRequestedBy", fields: [requesterMemberId], references: [id], onDelete: Restrict)
+  executedByMember GroupMembership? @relation("ApprovalExecutedBy", fields: [executedByMemberId], references: [id], onDelete: Restrict)
+  executedEntry    LedgerEntry?     @relation("ApprovalExecutedEntry", fields: [executedEntryId], references: [id], onDelete: Restrict)
+
+  eligibleVoters ApprovalEligibleVoter[]
+  votes          ApprovalVote[]
+
+  @@map("approval_requests")
+}
+
+model ApprovalEligibleVoter {
+  requestId String @map("request_id") @db.Uuid
+  memberId  String @map("member_id") @db.Uuid
+
+  request ApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  member  GroupMembership @relation(fields: [memberId], references: [id], onDelete: Restrict)
+
+  @@id([requestId, memberId])
+  @@map("approval_eligible_voters")
+}
+
+model ApprovalVote {
+  requestId String   @map("request_id") @db.Uuid
+  memberId  String   @map("member_id") @db.Uuid
+  approve   Boolean  @map("approve")
+  votedAt   DateTime @default(now()) @map("voted_at") @db.Timestamptz
+
+  request ApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  member  GroupMembership @relation(fields: [memberId], references: [id], onDelete: Restrict)
+
+  @@id([requestId, memberId])
+  @@map("approval_votes")
+}
+
+model BankReconciliation {
+  id                   String   @id @db.Uuid
+  groupId              String   @map("group_id") @db.Uuid
+  statementDate        DateTime @map("statement_date") @db.Date
+  bankBalancePaisa     BigInt   @map("bank_balance_paisa") @db.BigInt
+  recordedBalancePaisa BigInt   @map("recorded_balance_paisa") @db.BigInt
+  differencePaisa      BigInt   @map("difference_paisa") @db.BigInt
+  note                 String?  @map("note") @db.VarChar(200)
+  recordedByMemberId   String   @map("recorded_by_member_id") @db.Uuid
+  recordedAt           DateTime @default(now()) @map("recorded_at") @db.Timestamptz
+
+  group            Group           @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  recordedByMember GroupMembership @relation(fields: [recordedByMemberId], references: [id], onDelete: Restrict)
+
+  @@unique([groupId, statementDate])
+  @@map("bank_reconciliations")
+}
+
+model AuditLog {
+  id          String   @id @db.Uuid
+  groupId     String   @map("group_id") @db.Uuid
+  actorUserId String   @map("actor_user_id") @db.Uuid
+  action      String   @map("action") @db.VarChar(100)
+  field       String   @map("field") @db.VarChar(100)
+  beforeValue String?  @map("before_value") @db.Text
+  afterValue  String?  @map("after_value") @db.Text
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  group     Group @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  actorUser User  @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@map("audit_log")
+}
+
+model IdempotencyKey {
+  id             String   @id @db.Uuid
+  groupId        String?  @map("group_id") @db.Uuid
+  actorUserId    String   @map("actor_user_id") @db.Uuid
+  operation      String   @map("operation") @db.VarChar(50)
+  idempotencyKey String   @map("idempotency_key") @db.VarChar(100)
+  requestHash    String   @map("request_hash") @db.Char(64)
+  responseStatus Int      @map("response_status") @db.Integer
+  responseBody   Json     @map("response_body") @db.JsonB
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  expiresAt      DateTime @map("expires_at") @db.Timestamptz
+
+  group     Group? @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  actorUser User   @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@map("idempotency_keys")
+}
+
+model UserUpdateRead {
+  userId     String   @map("user_id") @db.Uuid
+  groupId    String   @map("group_id") @db.Uuid
+  feedItemId String   @map("feed_item_id") @db.VarChar(100)
+  readAt     DateTime @default(now()) @map("read_at") @db.Timestamptz
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  group Group @relation(fields: [groupId], references: [id], onDelete: Restrict)
+
+  @@id([userId, groupId, feedItemId])
+  @@map("user_update_reads")
 }
