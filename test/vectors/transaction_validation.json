@@ -1,0 +1,739 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "error": "invalidInput",
+        "pass": false
+      },
+      "input": {
+        "amountPaisa": 0,
+        "kind": "expense",
+        "note": null,
+        "now": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "occurredAt": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "title": "Zero amount"
+      },
+      "name": "record_amount_zero_rejected"
+    },
+    {
+      "expected": {
+        "error": "invalidInput",
+        "pass": false
+      },
+      "input": {
+        "amountPaisa": -100,
+        "kind": "expense",
+        "note": null,
+        "now": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "occurredAt": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "title": "Negative amount"
+      },
+      "name": "record_amount_negative_rejected"
+    },
+    {
+      "expected": {
+        "error": null,
+        "pass": true
+      },
+      "input": {
+        "amountPaisa": 1,
+        "kind": "expense",
+        "note": null,
+        "now": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "occurredAt": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "title": "One paisa test"
+      },
+      "name": "record_amount_one_paisa_minimum_allowed"
+    },
+    {
+      "expected": {
+        "error": "insufficientBalance",
+        "pass": false
+      },
+      "input": {
+        "amountPaisa": 1000000000,
+        "kind": "expense",
+        "note": null,
+        "now": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "occurredAt": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "title": "One billion paisa max test"
+      },
+      "name": "record_amount_one_billion_paisa_maximum_allowed"
+    },
+    {
+      "expected": {
+        "error": "invalidInput",
+        "pass": false
+      },
+      "input": {
+        "amountPaisa": 1000000001,
+        "kind": "expense",
+        "note": null,
+        "now": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "occurredAt": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "title": "Exceeds maximum"
+      },
+      "name": "record_amount_max_plus_one_rejected"
+    },
+    {
+      "expected": {
+        "error": "invalidInput",
+        "pass": false
+      },
+      "input": {
+        "amountPaisa": 10000,
+        "kind": "expense",
+        "note": null,
+        "now": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "occurredAt": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 1,
+          "y": 2026
+        },
+        "title": "Future date transaction"
+      },
+      "name": "record_date_future_rejected"
+    },
+    {
+      "expected": {
+        "error": null,
+        "pass": true
+      },
+      "input": {
+        "amountPaisa": 10000,
+        "kind": "expense",
+        "note": null,
+        "now": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "occurredAt": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "title": "Current date transaction"
+      },
+      "name": "record_date_exactly_now_allowed"
+    },
+    {
+      "expected": {
+        "error": "invalidInput",
+        "pass": false
+      },
+      "input": {
+        "amountPaisa": 10000,
+        "kind": "expense",
+        "note": null,
+        "now": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "occurredAt": {
+          "d": 14,
+          "h": 11,
+          "m": 11,
+          "mi": 59,
+          "ms": 0,
+          "s": 59,
+          "y": 2025
+        },
+        "title": "Too old transaction"
+      },
+      "name": "record_date_older_than_366_days_rejected"
+    },
+    {
+      "expected": {
+        "error": null,
+        "pass": true
+      },
+      "input": {
+        "amountPaisa": 10000,
+        "kind": "expense",
+        "note": null,
+        "now": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "occurredAt": {
+          "d": 14,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2025
+        },
+        "title": "Exact 366 day boundary"
+      },
+      "name": "record_date_exactly_366_days_boundary_allowed"
+    },
+    {
+      "expected": {
+        "error": null,
+        "pass": true
+      },
+      "input": {
+        "amountPaisa": 5000,
+        "kind": "expense",
+        "note": null,
+        "now": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "occurredAt": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "title": "Valid expense"
+      },
+      "name": "record_kind_expense_allowed"
+    },
+    {
+      "expected": {
+        "error": null,
+        "pass": true
+      },
+      "input": {
+        "amountPaisa": 5000,
+        "kind": "interest",
+        "note": null,
+        "now": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "occurredAt": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "title": "Valid interest"
+      },
+      "name": "record_kind_interest_allowed"
+    },
+    {
+      "expected": {
+        "error": "invalidInput",
+        "pass": false
+      },
+      "input": {
+        "amountPaisa": 5000,
+        "kind": "contribution",
+        "note": null,
+        "now": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "occurredAt": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "title": "Direct contribution"
+      },
+      "name": "record_kind_contribution_rejected_not_recordable"
+    },
+    {
+      "expected": {
+        "error": "invalidInput",
+        "pass": false
+      },
+      "input": {
+        "amountPaisa": 5000,
+        "kind": "withdrawal",
+        "note": null,
+        "now": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "occurredAt": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "title": "Direct withdrawal"
+      },
+      "name": "record_kind_withdrawal_rejected_not_recordable"
+    },
+    {
+      "expected": {
+        "error": "invalidInput",
+        "pass": false
+      },
+      "input": {
+        "amountPaisa": 5000,
+        "kind": "expense",
+        "note": null,
+        "now": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "occurredAt": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "title": ""
+      },
+      "name": "record_title_empty_rejected"
+    },
+    {
+      "expected": {
+        "error": "invalidInput",
+        "pass": false
+      },
+      "input": {
+        "amountPaisa": 5000,
+        "kind": "expense",
+        "note": null,
+        "now": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "occurredAt": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "title": "A"
+      },
+      "name": "record_title_one_character_rejected"
+    },
+    {
+      "expected": {
+        "error": null,
+        "pass": true
+      },
+      "input": {
+        "amountPaisa": 5000,
+        "kind": "expense",
+        "note": null,
+        "now": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "occurredAt": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "title": "AB"
+      },
+      "name": "record_title_two_characters_minimum_allowed"
+    },
+    {
+      "expected": {
+        "error": null,
+        "pass": true
+      },
+      "input": {
+        "amountPaisa": 5000,
+        "kind": "expense",
+        "note": null,
+        "now": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "occurredAt": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "title": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT"
+      },
+      "name": "record_title_sixty_characters_maximum_allowed"
+    },
+    {
+      "expected": {
+        "error": "invalidInput",
+        "pass": false
+      },
+      "input": {
+        "amountPaisa": 5000,
+        "kind": "expense",
+        "note": null,
+        "now": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "occurredAt": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "title": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT"
+      },
+      "name": "record_title_sixty_one_characters_rejected"
+    },
+    {
+      "expected": {
+        "error": null,
+        "pass": true
+      },
+      "input": {
+        "amountPaisa": 5000,
+        "kind": "expense",
+        "note": null,
+        "now": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "occurredAt": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "title": "Note test null"
+      },
+      "name": "record_note_null_allowed"
+    },
+    {
+      "expected": {
+        "error": null,
+        "pass": true
+      },
+      "input": {
+        "amountPaisa": 5000,
+        "kind": "expense",
+        "note": "",
+        "now": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "occurredAt": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "title": "Note test empty"
+      },
+      "name": "record_note_empty_allowed"
+    },
+    {
+      "expected": {
+        "error": null,
+        "pass": true
+      },
+      "input": {
+        "amountPaisa": 5000,
+        "kind": "expense",
+        "note": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN",
+        "now": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "occurredAt": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "title": "Note test 200"
+      },
+      "name": "record_note_two_hundred_characters_maximum_allowed"
+    },
+    {
+      "expected": {
+        "error": "invalidInput",
+        "pass": false
+      },
+      "input": {
+        "amountPaisa": 5000,
+        "kind": "expense",
+        "note": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN",
+        "now": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "occurredAt": {
+          "d": 15,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "title": "Note test 201"
+      },
+      "name": "record_note_two_hundred_one_characters_rejected"
+    },
+    {
+      "expected": {
+        "error": "Enter a reason",
+        "pass": false
+      },
+      "input": {
+        "reason": ""
+      },
+      "name": "reversal_reason_empty"
+    },
+    {
+      "expected": {
+        "error": "Reason must be 3 to 200 characters",
+        "pass": false
+      },
+      "input": {
+        "reason": "AB"
+      },
+      "name": "reversal_reason_two_chars_rejected"
+    },
+    {
+      "expected": {
+        "error": null,
+        "pass": true
+      },
+      "input": {
+        "reason": "ABC"
+      },
+      "name": "reversal_reason_three_chars_minimum_allowed"
+    },
+    {
+      "expected": {
+        "error": null,
+        "pass": true
+      },
+      "input": {
+        "reason": "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR"
+      },
+      "name": "reversal_reason_two_hundred_chars_maximum_allowed"
+    },
+    {
+      "expected": {
+        "error": "Reason must be 3 to 200 characters",
+        "pass": false
+      },
+      "input": {
+        "reason": "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR"
+      },
+      "name": "reversal_reason_two_hundred_one_chars_rejected"
+    }
+  ],
+  "domain": "transaction_validation",
+  "schemaVersion": 1,
+  "source": "lib/features/transactions/domain/transaction_validators.dart:validateTransactionTitle,validateTransactionNote,validateReversalReason,isRecordableKind,lib/features/transactions/data/repositories/mock_transactions_repository.dart:MockTransactionsRepository.recordTransaction"
+}

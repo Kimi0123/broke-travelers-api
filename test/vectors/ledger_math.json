@@ -1,0 +1,520 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "signedPaisa": 50000
+      },
+      "input": {
+        "entry": {
+          "id": "e-contribution",
+          "kind": "contribution",
+          "magnitudePaisa": 50000,
+          "occurredAt": {
+            "d": 1,
+            "h": 10,
+            "m": 11,
+            "mi": 0,
+            "ms": 0,
+            "s": 0,
+            "y": 2026
+          },
+          "reversesEntryId": null,
+          "status": "verified",
+          "title": "contribution entry"
+        }
+      },
+      "name": "signed_paisa_contribution"
+    },
+    {
+      "expected": {
+        "signedPaisa": -50000
+      },
+      "input": {
+        "entry": {
+          "id": "e-contribution-rev",
+          "kind": "contribution",
+          "magnitudePaisa": 50000,
+          "occurredAt": {
+            "d": 2,
+            "h": 10,
+            "m": 11,
+            "mi": 0,
+            "ms": 0,
+            "s": 0,
+            "y": 2026
+          },
+          "reversesEntryId": "e-contribution",
+          "status": "verified",
+          "title": "Reversal of contribution"
+        }
+      },
+      "name": "signed_paisa_contribution_reversal"
+    },
+    {
+      "expected": {
+        "signedPaisa": 50000
+      },
+      "input": {
+        "entry": {
+          "id": "e-interest",
+          "kind": "interest",
+          "magnitudePaisa": 50000,
+          "occurredAt": {
+            "d": 1,
+            "h": 10,
+            "m": 11,
+            "mi": 0,
+            "ms": 0,
+            "s": 0,
+            "y": 2026
+          },
+          "reversesEntryId": null,
+          "status": "verified",
+          "title": "interest entry"
+        }
+      },
+      "name": "signed_paisa_interest"
+    },
+    {
+      "expected": {
+        "signedPaisa": -50000
+      },
+      "input": {
+        "entry": {
+          "id": "e-interest-rev",
+          "kind": "interest",
+          "magnitudePaisa": 50000,
+          "occurredAt": {
+            "d": 2,
+            "h": 10,
+            "m": 11,
+            "mi": 0,
+            "ms": 0,
+            "s": 0,
+            "y": 2026
+          },
+          "reversesEntryId": "e-interest",
+          "status": "verified",
+          "title": "Reversal of interest"
+        }
+      },
+      "name": "signed_paisa_interest_reversal"
+    },
+    {
+      "expected": {
+        "signedPaisa": -50000
+      },
+      "input": {
+        "entry": {
+          "id": "e-expense",
+          "kind": "expense",
+          "magnitudePaisa": 50000,
+          "occurredAt": {
+            "d": 1,
+            "h": 10,
+            "m": 11,
+            "mi": 0,
+            "ms": 0,
+            "s": 0,
+            "y": 2026
+          },
+          "reversesEntryId": null,
+          "status": "verified",
+          "title": "expense entry"
+        }
+      },
+      "name": "signed_paisa_expense"
+    },
+    {
+      "expected": {
+        "signedPaisa": 50000
+      },
+      "input": {
+        "entry": {
+          "id": "e-expense-rev",
+          "kind": "expense",
+          "magnitudePaisa": 50000,
+          "occurredAt": {
+            "d": 2,
+            "h": 10,
+            "m": 11,
+            "mi": 0,
+            "ms": 0,
+            "s": 0,
+            "y": 2026
+          },
+          "reversesEntryId": "e-expense",
+          "status": "verified",
+          "title": "Reversal of expense"
+        }
+      },
+      "name": "signed_paisa_expense_reversal"
+    },
+    {
+      "expected": {
+        "signedPaisa": -50000
+      },
+      "input": {
+        "entry": {
+          "id": "e-withdrawal",
+          "kind": "withdrawal",
+          "magnitudePaisa": 50000,
+          "occurredAt": {
+            "d": 1,
+            "h": 10,
+            "m": 11,
+            "mi": 0,
+            "ms": 0,
+            "s": 0,
+            "y": 2026
+          },
+          "reversesEntryId": null,
+          "status": "verified",
+          "title": "withdrawal entry"
+        }
+      },
+      "name": "signed_paisa_withdrawal"
+    },
+    {
+      "expected": {
+        "signedPaisa": 50000
+      },
+      "input": {
+        "entry": {
+          "id": "e-withdrawal-rev",
+          "kind": "withdrawal",
+          "magnitudePaisa": 50000,
+          "occurredAt": {
+            "d": 2,
+            "h": 10,
+            "m": 11,
+            "mi": 0,
+            "ms": 0,
+            "s": 0,
+            "y": 2026
+          },
+          "reversesEntryId": "e-withdrawal",
+          "status": "verified",
+          "title": "Reversal of withdrawal"
+        }
+      },
+      "name": "signed_paisa_withdrawal_reversal"
+    },
+    {
+      "expected": {
+        "balancePaisa": 0
+      },
+      "input": {
+        "asOf": null,
+        "entries": []
+      },
+      "name": "verified_balance_empty"
+    },
+    {
+      "expected": {
+        "balancePaisa": 0
+      },
+      "input": {
+        "asOf": null,
+        "entries": [
+          {
+            "id": "e-pen",
+            "kind": "contribution",
+            "magnitudePaisa": 70000,
+            "occurredAt": {
+              "d": 1,
+              "h": 10,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "reversesEntryId": null,
+            "status": "pendingVerification",
+            "title": "Pending"
+          },
+          {
+            "id": "e-rej",
+            "kind": "contribution",
+            "magnitudePaisa": 70000,
+            "occurredAt": {
+              "d": 2,
+              "h": 11,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "reversesEntryId": null,
+            "status": "rejected",
+            "title": "Rejected"
+          }
+        ]
+      },
+      "name": "verified_balance_ignores_pending_and_rejected"
+    },
+    {
+      "expected": {
+        "balancePaisa": 55000
+      },
+      "input": {
+        "asOf": null,
+        "entries": [
+          {
+            "id": "e-con",
+            "kind": "contribution",
+            "magnitudePaisa": 100000,
+            "occurredAt": {
+              "d": 1,
+              "h": 9,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "reversesEntryId": null,
+            "status": "verified",
+            "title": "Contribution"
+          },
+          {
+            "id": "e-int",
+            "kind": "interest",
+            "magnitudePaisa": 5000,
+            "occurredAt": {
+              "d": 2,
+              "h": 10,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "reversesEntryId": null,
+            "status": "verified",
+            "title": "Bank interest"
+          },
+          {
+            "id": "e-exp",
+            "kind": "expense",
+            "magnitudePaisa": 30000,
+            "occurredAt": {
+              "d": 3,
+              "h": 19,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "reversesEntryId": null,
+            "status": "verified",
+            "title": "Shared dinner"
+          },
+          {
+            "id": "e-wth",
+            "kind": "withdrawal",
+            "magnitudePaisa": 20000,
+            "occurredAt": {
+              "d": 4,
+              "h": 15,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "reversesEntryId": null,
+            "status": "verified",
+            "title": "ATM Cash out"
+          }
+        ]
+      },
+      "name": "verified_balance_mixed_inflow_and_outflow"
+    },
+    {
+      "expected": {
+        "balancePaisa": 50000
+      },
+      "input": {
+        "asOf": null,
+        "entries": [
+          {
+            "id": "e-exp-orig",
+            "kind": "expense",
+            "magnitudePaisa": 25000,
+            "occurredAt": {
+              "d": 1,
+              "h": 12,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "reversesEntryId": null,
+            "status": "verified",
+            "title": "Accidental expense"
+          },
+          {
+            "id": "e-exp-rev",
+            "kind": "expense",
+            "magnitudePaisa": 25000,
+            "occurredAt": {
+              "d": 2,
+              "h": 12,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "reversesEntryId": "e-exp-orig",
+            "status": "verified",
+            "title": "Expense refund reversal"
+          },
+          {
+            "id": "e-con-base",
+            "kind": "contribution",
+            "magnitudePaisa": 50000,
+            "occurredAt": {
+              "d": 3,
+              "h": 12,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "reversesEntryId": null,
+            "status": "verified",
+            "title": "Base contribution"
+          }
+        ]
+      },
+      "name": "verified_balance_with_reversals"
+    },
+    {
+      "expected": {
+        "balancePaisa": 40000
+      },
+      "input": {
+        "asOf": {
+          "d": 5,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "entries": [
+          {
+            "id": "e-in-cutoff",
+            "kind": "contribution",
+            "magnitudePaisa": 40000,
+            "occurredAt": {
+              "d": 5,
+              "h": 23,
+              "m": 11,
+              "mi": 59,
+              "ms": 999,
+              "s": 59,
+              "y": 2026
+            },
+            "reversesEntryId": null,
+            "status": "verified",
+            "title": "Included at last ms of day"
+          },
+          {
+            "id": "e-out-cutoff",
+            "kind": "contribution",
+            "magnitudePaisa": 60000,
+            "occurredAt": {
+              "d": 6,
+              "h": 0,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "reversesEntryId": null,
+            "status": "verified",
+            "title": "Excluded at midnight next day"
+          }
+        ]
+      },
+      "name": "verified_balance_as_of_boundary_end_of_day"
+    },
+    {
+      "expected": {
+        "balancePaisa": 35000
+      },
+      "input": {
+        "asOf": {
+          "d": 5,
+          "h": 14,
+          "m": 11,
+          "mi": 30,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "entries": [
+          {
+            "id": "e-exact",
+            "kind": "contribution",
+            "magnitudePaisa": 35000,
+            "occurredAt": {
+              "d": 5,
+              "h": 14,
+              "m": 11,
+              "mi": 30,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "reversesEntryId": null,
+            "status": "verified",
+            "title": "Exact asOf day entry"
+          }
+        ]
+      },
+      "name": "verified_balance_as_of_exact_day"
+    },
+    {
+      "expected": {
+        "balancePaisa": -80000
+      },
+      "input": {
+        "asOf": null,
+        "entries": [
+          {
+            "id": "e-overdraft",
+            "kind": "expense",
+            "magnitudePaisa": 80000,
+            "occurredAt": {
+              "d": 1,
+              "h": 10,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "reversesEntryId": null,
+            "status": "verified",
+            "title": "Emergency advance"
+          }
+        ]
+      },
+      "name": "verified_balance_negative_returned_as_is"
+    }
+  ],
+  "domain": "ledger_math",
+  "schemaVersion": 1,
+  "source": "lib/core/mock/ledger_math.dart:signedPaisa,verifiedBalancePaisa"
+}

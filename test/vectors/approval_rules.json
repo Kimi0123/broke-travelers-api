@@ -1,0 +1,236 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "votesNeeded": 2
+      },
+      "input": {
+        "eligible": 2
+      },
+      "name": "votes_needed_2_eligible"
+    },
+    {
+      "expected": {
+        "votesNeeded": 2
+      },
+      "input": {
+        "eligible": 3
+      },
+      "name": "votes_needed_3_eligible"
+    },
+    {
+      "expected": {
+        "votesNeeded": 3
+      },
+      "input": {
+        "eligible": 4
+      },
+      "name": "votes_needed_4_eligible"
+    },
+    {
+      "expected": {
+        "votesNeeded": 3
+      },
+      "input": {
+        "eligible": 5
+      },
+      "name": "votes_needed_5_eligible"
+    },
+    {
+      "expected": {
+        "votesNeeded": 4
+      },
+      "input": {
+        "eligible": 6
+      },
+      "name": "votes_needed_6_eligible"
+    },
+    {
+      "expected": {
+        "votesNeeded": 4
+      },
+      "input": {
+        "eligible": 7
+      },
+      "name": "votes_needed_7_eligible"
+    },
+    {
+      "expected": {
+        "votesNeeded": 5
+      },
+      "input": {
+        "eligible": 8
+      },
+      "name": "votes_needed_8_eligible"
+    },
+    {
+      "expected": {
+        "status": "approved"
+      },
+      "input": {
+        "approvals": 3,
+        "eligible": 5,
+        "rejections": 0
+      },
+      "name": "resolve_status_approved_exact_threshold"
+    },
+    {
+      "expected": {
+        "status": "approved"
+      },
+      "input": {
+        "approvals": 3,
+        "eligible": 5,
+        "rejections": 1
+      },
+      "name": "resolve_status_approved_with_some_rejections"
+    },
+    {
+      "expected": {
+        "status": "rejected"
+      },
+      "input": {
+        "approvals": 0,
+        "eligible": 5,
+        "rejections": 3
+      },
+      "name": "resolve_status_early_rejection_no_approvals"
+    },
+    {
+      "expected": {
+        "status": "rejected"
+      },
+      "input": {
+        "approvals": 1,
+        "eligible": 5,
+        "rejections": 3
+      },
+      "name": "resolve_status_early_rejection_one_approval"
+    },
+    {
+      "expected": {
+        "status": "rejected"
+      },
+      "input": {
+        "approvals": 2,
+        "eligible": 4,
+        "rejections": 2
+      },
+      "name": "resolve_status_tie_causes_rejection_four_eligible"
+    },
+    {
+      "expected": {
+        "status": "rejected"
+      },
+      "input": {
+        "approvals": 3,
+        "eligible": 6,
+        "rejections": 3
+      },
+      "name": "resolve_status_tie_causes_rejection_six_eligible"
+    },
+    {
+      "expected": {
+        "status": "open"
+      },
+      "input": {
+        "approvals": 0,
+        "eligible": 5,
+        "rejections": 0
+      },
+      "name": "resolve_status_open_zero_votes"
+    },
+    {
+      "expected": {
+        "status": "open"
+      },
+      "input": {
+        "approvals": 2,
+        "eligible": 5,
+        "rejections": 1
+      },
+      "name": "resolve_status_open_in_progress"
+    },
+    {
+      "expected": {
+        "status": "open"
+      },
+      "input": {
+        "createdAt": {
+          "d": 1,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "now": {
+          "d": 8,
+          "h": 11,
+          "m": 11,
+          "mi": 59,
+          "ms": 0,
+          "s": 59,
+          "y": 2026
+        }
+      },
+      "name": "approval_expiry_before_seven_days_is_open"
+    },
+    {
+      "expected": {
+        "status": "expired"
+      },
+      "input": {
+        "createdAt": {
+          "d": 1,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "now": {
+          "d": 8,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        }
+      },
+      "name": "approval_expiry_exactly_at_seven_days_is_expired"
+    },
+    {
+      "expected": {
+        "status": "expired"
+      },
+      "input": {
+        "createdAt": {
+          "d": 1,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "now": {
+          "d": 8,
+          "h": 12,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 1,
+          "y": 2026
+        }
+      },
+      "name": "approval_expiry_one_second_after_seven_days_is_expired"
+    }
+  ],
+  "domain": "approval_rules",
+  "schemaVersion": 1,
+  "source": "lib/features/approvals/domain/approval_rules.dart:votesNeeded,resolveOpenStatus,lib/features/approvals/data/repositories/mock_approvals_repository.dart:MockApprovalsRepository.getApproval"
+}

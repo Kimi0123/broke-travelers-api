@@ -1,0 +1,794 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "status": "pendingVerification"
+      },
+      "input": {
+        "clock": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "entries": [
+          {
+            "id": "e-pen",
+            "kind": "contribution",
+            "magnitudePaisa": 70000,
+            "memberId": "m1",
+            "occurredAt": {
+              "d": 2,
+              "h": 10,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "periodMonth": null,
+            "reversesEntryId": null,
+            "status": "pendingVerification",
+            "title": "Pending contribution"
+          }
+        ],
+        "member": {
+          "id": "m1"
+        },
+        "period": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        }
+      },
+      "name": "obligation_pending_only"
+    },
+    {
+      "expected": {
+        "status": "verified"
+      },
+      "input": {
+        "clock": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "entries": [
+          {
+            "id": "e-ver",
+            "kind": "contribution",
+            "magnitudePaisa": 70000,
+            "memberId": "m1",
+            "occurredAt": {
+              "d": 3,
+              "h": 10,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "periodMonth": null,
+            "reversesEntryId": null,
+            "status": "verified",
+            "title": "Verified contribution"
+          }
+        ],
+        "member": {
+          "id": "m1"
+        },
+        "period": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        }
+      },
+      "name": "obligation_verified_only"
+    },
+    {
+      "expected": {
+        "status": "verified"
+      },
+      "input": {
+        "clock": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "entries": [
+          {
+            "id": "e-pen",
+            "kind": "contribution",
+            "magnitudePaisa": 70000,
+            "memberId": "m1",
+            "occurredAt": {
+              "d": 2,
+              "h": 10,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "periodMonth": null,
+            "reversesEntryId": null,
+            "status": "pendingVerification",
+            "title": "Initial pending"
+          },
+          {
+            "id": "e-ver",
+            "kind": "contribution",
+            "magnitudePaisa": 70000,
+            "memberId": "m1",
+            "occurredAt": {
+              "d": 5,
+              "h": 12,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "periodMonth": null,
+            "reversesEntryId": null,
+            "status": "verified",
+            "title": "Later verified"
+          }
+        ],
+        "member": {
+          "id": "m1"
+        },
+        "period": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        }
+      },
+      "name": "obligation_pending_then_verified"
+    },
+    {
+      "expected": {
+        "status": "rejected"
+      },
+      "input": {
+        "clock": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "entries": [
+          {
+            "id": "e-ver",
+            "kind": "contribution",
+            "magnitudePaisa": 70000,
+            "memberId": "m1",
+            "occurredAt": {
+              "d": 2,
+              "h": 10,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "periodMonth": null,
+            "reversesEntryId": null,
+            "status": "verified",
+            "title": "Earlier verified"
+          },
+          {
+            "id": "e-rej",
+            "kind": "contribution",
+            "magnitudePaisa": 70000,
+            "memberId": "m1",
+            "occurredAt": {
+              "d": 10,
+              "h": 14,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "periodMonth": null,
+            "reversesEntryId": null,
+            "status": "rejected",
+            "title": "Later rejected submission"
+          }
+        ],
+        "member": {
+          "id": "m1"
+        },
+        "period": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        }
+      },
+      "name": "obligation_verified_then_rejected_later"
+    },
+    {
+      "expected": {
+        "status": "pendingVerification"
+      },
+      "input": {
+        "clock": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "entries": [
+          {
+            "id": "e-rej",
+            "kind": "contribution",
+            "magnitudePaisa": 70000,
+            "memberId": "m1",
+            "occurredAt": {
+              "d": 2,
+              "h": 10,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "periodMonth": null,
+            "reversesEntryId": null,
+            "status": "rejected",
+            "title": "First rejected"
+          },
+          {
+            "id": "e-pen",
+            "kind": "contribution",
+            "magnitudePaisa": 70000,
+            "memberId": "m1",
+            "occurredAt": {
+              "d": 5,
+              "h": 11,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "periodMonth": null,
+            "reversesEntryId": null,
+            "status": "pendingVerification",
+            "title": "Resubmitted pending"
+          }
+        ],
+        "member": {
+          "id": "m1"
+        },
+        "period": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        }
+      },
+      "name": "obligation_rejected_then_pending"
+    },
+    {
+      "expected": {
+        "status": "pendingVerification"
+      },
+      "input": {
+        "clock": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "entries": [
+          {
+            "id": "e-1",
+            "kind": "contribution",
+            "magnitudePaisa": 70000,
+            "memberId": "m1",
+            "occurredAt": {
+              "d": 1,
+              "h": 9,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "periodMonth": null,
+            "reversesEntryId": null,
+            "status": "rejected",
+            "title": "First rejected"
+          },
+          {
+            "id": "e-2",
+            "kind": "contribution",
+            "magnitudePaisa": 70000,
+            "memberId": "m1",
+            "occurredAt": {
+              "d": 4,
+              "h": 15,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "periodMonth": null,
+            "reversesEntryId": null,
+            "status": "verified",
+            "title": "Second verified"
+          },
+          {
+            "id": "e-3",
+            "kind": "contribution",
+            "magnitudePaisa": 70000,
+            "memberId": "m1",
+            "occurredAt": {
+              "d": 8,
+              "h": 18,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "periodMonth": null,
+            "reversesEntryId": null,
+            "status": "pendingVerification",
+            "title": "Third pending"
+          }
+        ],
+        "member": {
+          "id": "m1"
+        },
+        "period": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        }
+      },
+      "name": "obligation_several_submissions_latest_wins"
+    },
+    {
+      "expected": {
+        "status": "pendingVerification"
+      },
+      "input": {
+        "clock": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "entries": [
+          {
+            "id": "e-tie-first",
+            "kind": "contribution",
+            "magnitudePaisa": 70000,
+            "memberId": "m1",
+            "occurredAt": {
+              "d": 8,
+              "h": 12,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "periodMonth": null,
+            "reversesEntryId": null,
+            "status": "rejected",
+            "title": "First inserted at tieTime"
+          },
+          {
+            "id": "e-tie-second",
+            "kind": "contribution",
+            "magnitudePaisa": 70000,
+            "memberId": "m1",
+            "occurredAt": {
+              "d": 8,
+              "h": 12,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "periodMonth": null,
+            "reversesEntryId": null,
+            "status": "pendingVerification",
+            "title": "Second inserted at tieTime"
+          }
+        ],
+        "member": {
+          "id": "m1"
+        },
+        "period": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        }
+      },
+      "name": "obligation_identical_timestamps_insertion_order_wins"
+    },
+    {
+      "expected": {
+        "status": "overdue"
+      },
+      "input": {
+        "clock": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "entries": [],
+        "member": {
+          "id": "m1"
+        },
+        "period": {
+          "d": 1,
+          "h": 0,
+          "m": 10,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        }
+      },
+      "name": "obligation_overdue_past_period_no_submission"
+    },
+    {
+      "expected": {
+        "status": "notSubmitted"
+      },
+      "input": {
+        "clock": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "entries": [],
+        "member": {
+          "id": "m1"
+        },
+        "period": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        }
+      },
+      "name": "obligation_not_submitted_anchor_period_no_submission"
+    },
+    {
+      "expected": {
+        "status": "notSubmitted"
+      },
+      "input": {
+        "clock": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "entries": [],
+        "member": {
+          "id": "m1"
+        },
+        "period": {
+          "d": 1,
+          "h": 0,
+          "m": 12,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        }
+      },
+      "name": "obligation_not_submitted_future_period_no_submission"
+    },
+    {
+      "expected": {
+        "status": "verified"
+      },
+      "input": {
+        "clock": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "entries": [
+          {
+            "id": "e-catchup",
+            "kind": "contribution",
+            "magnitudePaisa": 70000,
+            "memberId": "m1",
+            "occurredAt": {
+              "d": 10,
+              "h": 10,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "periodMonth": {
+              "d": 1,
+              "h": 0,
+              "m": 10,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "reversesEntryId": null,
+            "status": "verified",
+            "title": "October catch-up paid in November"
+          }
+        ],
+        "member": {
+          "id": "m1"
+        },
+        "period": {
+          "d": 1,
+          "h": 0,
+          "m": 10,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        }
+      },
+      "name": "obligation_catch_up_affects_designated_past_period"
+    },
+    {
+      "expected": {
+        "status": "notSubmitted"
+      },
+      "input": {
+        "clock": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "entries": [
+          {
+            "id": "e-catchup",
+            "kind": "contribution",
+            "magnitudePaisa": 70000,
+            "memberId": "m1",
+            "occurredAt": {
+              "d": 10,
+              "h": 10,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "periodMonth": {
+              "d": 1,
+              "h": 0,
+              "m": 10,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "reversesEntryId": null,
+            "status": "verified",
+            "title": "October catch-up paid in November"
+          }
+        ],
+        "member": {
+          "id": "m1"
+        },
+        "period": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        }
+      },
+      "name": "obligation_catch_up_does_not_satisfy_current_period"
+    },
+    {
+      "expected": {
+        "status": "notSubmitted"
+      },
+      "input": {
+        "clock": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "entries": [
+          {
+            "id": "e-m2",
+            "kind": "contribution",
+            "magnitudePaisa": 70000,
+            "memberId": "m2",
+            "occurredAt": {
+              "d": 3,
+              "h": 10,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "periodMonth": null,
+            "reversesEntryId": null,
+            "status": "verified",
+            "title": "M2 contribution"
+          },
+          {
+            "id": "e-int",
+            "kind": "interest",
+            "magnitudePaisa": 5000,
+            "memberId": "m1",
+            "occurredAt": {
+              "d": 4,
+              "h": 10,
+              "m": 11,
+              "mi": 0,
+              "ms": 0,
+              "s": 0,
+              "y": 2026
+            },
+            "periodMonth": null,
+            "reversesEntryId": null,
+            "status": "verified",
+            "title": "Interest credit"
+          }
+        ],
+        "member": {
+          "id": "m1"
+        },
+        "period": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        }
+      },
+      "name": "obligation_ignores_other_members_and_non_contributions"
+    },
+    {
+      "expected": {
+        "status": "notSubmitted"
+      },
+      "input": {
+        "clock": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "entries": [],
+        "member": {
+          "id": "m-removed",
+          "joinedAt": {
+            "d": 1,
+            "h": 0,
+            "m": 8,
+            "mi": 0,
+            "ms": 0,
+            "s": 0,
+            "y": 2026
+          },
+          "leftAt": {
+            "d": 15,
+            "h": 0,
+            "m": 10,
+            "mi": 0,
+            "ms": 0,
+            "s": 0,
+            "y": 2026
+          }
+        },
+        "period": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        }
+      },
+      "name": "obligation_removed_member_without_submission"
+    }
+  ],
+  "domain": "obligation_status",
+  "schemaVersion": 1,
+  "source": "lib/core/mock/obligation_status.dart:deriveObligationStatus"
+}

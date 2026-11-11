@@ -1,0 +1,644 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "report": {
+          "closingPaisa": 280000,
+          "contributionsPaisa": 280000,
+          "expectedTotalPaisa": 280000,
+          "expensesPaisa": 0,
+          "interestPaisa": 0,
+          "month": {
+            "d": 1,
+            "h": 0,
+            "m": 9,
+            "mi": 0,
+            "ms": 0,
+            "s": 0,
+            "y": 2026
+          },
+          "obligatedCount": 4,
+          "openingPaisa": 0,
+          "outstandingPaisa": 0,
+          "pendingPaisa": 0,
+          "verifiedCount": 4,
+          "withdrawalsPaisa": 0
+        }
+      },
+      "input": {
+        "expectedPerMemberPaisa": 70000,
+        "month": {
+          "d": 1,
+          "h": 0,
+          "m": 9,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        }
+      },
+      "name": "monthly_report_2026_09"
+    },
+    {
+      "expected": {
+        "report": {
+          "closingPaisa": 520000,
+          "contributionsPaisa": 280000,
+          "expectedTotalPaisa": 280000,
+          "expensesPaisa": 50000,
+          "interestPaisa": 10000,
+          "month": {
+            "d": 1,
+            "h": 0,
+            "m": 10,
+            "mi": 0,
+            "ms": 0,
+            "s": 0,
+            "y": 2026
+          },
+          "obligatedCount": 4,
+          "openingPaisa": 280000,
+          "outstandingPaisa": 0,
+          "pendingPaisa": 0,
+          "verifiedCount": 4,
+          "withdrawalsPaisa": 0
+        }
+      },
+      "input": {
+        "expectedPerMemberPaisa": 70000,
+        "month": {
+          "d": 1,
+          "h": 0,
+          "m": 10,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        }
+      },
+      "name": "monthly_report_2026_10"
+    },
+    {
+      "expected": {
+        "report": {
+          "closingPaisa": 730000,
+          "contributionsPaisa": 210000,
+          "expectedTotalPaisa": 280000,
+          "expensesPaisa": 0,
+          "interestPaisa": 0,
+          "month": {
+            "d": 1,
+            "h": 0,
+            "m": 11,
+            "mi": 0,
+            "ms": 0,
+            "s": 0,
+            "y": 2026
+          },
+          "obligatedCount": 4,
+          "openingPaisa": 520000,
+          "outstandingPaisa": 70000,
+          "pendingPaisa": 70000,
+          "verifiedCount": 3,
+          "withdrawalsPaisa": 0
+        }
+      },
+      "input": {
+        "expectedPerMemberPaisa": 70000,
+        "month": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        }
+      },
+      "name": "monthly_report_2026_11"
+    },
+    {
+      "expected": {
+        "report": {
+          "expectedTotalPaisa": 280000,
+          "month": {
+            "d": 1,
+            "h": 0,
+            "m": 11,
+            "mi": 0,
+            "ms": 0,
+            "s": 0,
+            "y": 2026
+          },
+          "outstandingTotalPaisa": 70000,
+          "pendingTotalPaisa": 70000,
+          "rows": [
+            {
+              "expectedPaisa": 70000,
+              "memberId": "m1",
+              "name": "Nirvan",
+              "outstandingPaisa": 0,
+              "pendingPaisa": 0,
+              "status": "verified",
+              "verifiedPaisa": 70000
+            },
+            {
+              "expectedPaisa": 70000,
+              "memberId": "m2",
+              "name": "Sita",
+              "outstandingPaisa": 0,
+              "pendingPaisa": 0,
+              "status": "verified",
+              "verifiedPaisa": 70000
+            },
+            {
+              "expectedPaisa": 70000,
+              "memberId": "m3",
+              "name": "Ram",
+              "outstandingPaisa": 0,
+              "pendingPaisa": 0,
+              "status": "verified",
+              "verifiedPaisa": 70000
+            },
+            {
+              "expectedPaisa": 70000,
+              "memberId": "m4",
+              "name": "Hari",
+              "outstandingPaisa": 70000,
+              "pendingPaisa": 70000,
+              "status": "rejected",
+              "verifiedPaisa": 0
+            }
+          ],
+          "verifiedTotalPaisa": 210000
+        }
+      },
+      "input": {
+        "expectedPerMemberPaisa": 70000,
+        "month": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        }
+      },
+      "name": "member_report_2026_11"
+    },
+    {
+      "expected": {
+        "report": {
+          "closingPaisa": 730000,
+          "contributionsPaisa": 770000,
+          "expensesPaisa": 50000,
+          "interestPaisa": 10000,
+          "months": [
+            {
+              "closingPaisa": 280000,
+              "contributionsPaisa": 280000,
+              "expensesPaisa": 0,
+              "interestPaisa": 0,
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 9,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "netPaisa": 280000,
+              "withdrawalsPaisa": 0
+            },
+            {
+              "closingPaisa": 520000,
+              "contributionsPaisa": 280000,
+              "expensesPaisa": 50000,
+              "interestPaisa": 10000,
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 10,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "netPaisa": 240000,
+              "withdrawalsPaisa": 0
+            },
+            {
+              "closingPaisa": 730000,
+              "contributionsPaisa": 210000,
+              "expensesPaisa": 0,
+              "interestPaisa": 0,
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 11,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "netPaisa": 210000,
+              "withdrawalsPaisa": 0
+            }
+          ],
+          "netPaisa": 730000,
+          "withdrawalsPaisa": 0,
+          "year": 2026
+        }
+      },
+      "input": {
+        "lastMonth": {
+          "d": 1,
+          "h": 0,
+          "m": 11,
+          "mi": 0,
+          "ms": 0,
+          "s": 0,
+          "y": 2026
+        },
+        "year": 2026
+      },
+      "name": "annual_report_2026"
+    },
+    {
+      "expected": {
+        "report": {
+          "kind": "expense",
+          "monthTotals": [
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 1,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 0
+            },
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 2,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 0
+            },
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 3,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 0
+            },
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 4,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 0
+            },
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 5,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 0
+            },
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 6,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 0
+            },
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 7,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 0
+            },
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 8,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 0
+            },
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 9,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 0
+            },
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 10,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 50000
+            },
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 11,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 0
+            },
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 12,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 0
+            }
+          ],
+          "rows": [
+            {
+              "amountPaisa": 50000,
+              "date": {
+                "d": 30,
+                "h": 0,
+                "m": 10,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "id": "e10",
+              "isReversal": false,
+              "isReversed": false,
+              "title": "Group dinner"
+            },
+            {
+              "amountPaisa": 20000,
+              "date": {
+                "d": 6,
+                "h": 0,
+                "m": 11,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "id": "e16",
+              "isReversal": false,
+              "isReversed": true,
+              "title": "Erroneous fee"
+            },
+            {
+              "amountPaisa": 20000,
+              "date": {
+                "d": 7,
+                "h": 0,
+                "m": 11,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "id": "e17",
+              "isReversal": true,
+              "isReversed": false,
+              "title": "Fee refund reversal"
+            }
+          ],
+          "totalPaisa": 50000,
+          "year": 2026
+        }
+      },
+      "input": {
+        "kind": "expense",
+        "year": 2026
+      },
+      "name": "outflow_report_2026_expense"
+    },
+    {
+      "expected": {
+        "report": {
+          "kind": "withdrawal",
+          "monthTotals": [
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 1,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 0
+            },
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 2,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 0
+            },
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 3,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 0
+            },
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 4,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 0
+            },
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 5,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 0
+            },
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 6,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 0
+            },
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 7,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 0
+            },
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 8,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 0
+            },
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 9,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 0
+            },
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 10,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 0
+            },
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 11,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 0
+            },
+            {
+              "month": {
+                "d": 1,
+                "h": 0,
+                "m": 12,
+                "mi": 0,
+                "ms": 0,
+                "s": 0,
+                "y": 2026
+              },
+              "totalPaisa": 0
+            }
+          ],
+          "rows": [],
+          "totalPaisa": 0,
+          "year": 2026
+        }
+      },
+      "input": {
+        "kind": "withdrawal",
+        "year": 2026
+      },
+      "name": "outflow_report_2026_withdrawal"
+    }
+  ],
+  "domain": "reports",
+  "schemaVersion": 1,
+  "source": "lib/features/reports/domain/report_builders.dart:buildMonthlyReport,buildMemberReport,buildAnnualReport,buildOutflowReport"
+}

@@ -1,0 +1,255 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "normalized": "NEPAL123"
+      },
+      "input": {
+        "reference": "nepal-123"
+      },
+      "name": "normalize_reference_lowercase_to_uppercase"
+    },
+    {
+      "expected": {
+        "normalized": "KHALTI99"
+      },
+      "input": {
+        "reference": "  KHA LTI 99 "
+      },
+      "name": "normalize_reference_strip_whitespace"
+    },
+    {
+      "expected": {
+        "normalized": "ESEWA123"
+      },
+      "input": {
+        "reference": " es-ew a-1 2 3 "
+      },
+      "name": "normalize_reference_strip_hyphens_and_spaces"
+    },
+    {
+      "expected": {
+        "normalized": "TRX9988"
+      },
+      "input": {
+        "reference": "TRX9988"
+      },
+      "name": "normalize_reference_already_normalized"
+    },
+    {
+      "expected": {
+        "normalized": ""
+      },
+      "input": {
+        "reference": ""
+      },
+      "name": "normalize_reference_empty"
+    },
+    {
+      "expected": {
+        "error": null,
+        "valid": true
+      },
+      "input": {
+        "method": "cash",
+        "reference": null
+      },
+      "name": "validate_cash_null_reference_allowed"
+    },
+    {
+      "expected": {
+        "error": null,
+        "valid": true
+      },
+      "input": {
+        "method": "cash",
+        "reference": ""
+      },
+      "name": "validate_cash_empty_reference_allowed"
+    },
+    {
+      "expected": {
+        "error": null,
+        "valid": true
+      },
+      "input": {
+        "method": "cash",
+        "reference": "RCP-1001"
+      },
+      "name": "validate_cash_valid_reference_allowed"
+    },
+    {
+      "expected": {
+        "error": "Use 4 to 40 letters, numbers, - _ or /",
+        "valid": false
+      },
+      "input": {
+        "method": "cash",
+        "reference": "RCP@1001"
+      },
+      "name": "validate_cash_invalid_characters_rejected"
+    },
+    {
+      "expected": {
+        "error": "Enter the payment reference",
+        "valid": false
+      },
+      "input": {
+        "method": "esewa",
+        "reference": null
+      },
+      "name": "validate_esewa_null_reference_rejected"
+    },
+    {
+      "expected": {
+        "error": "Enter the payment reference",
+        "valid": false
+      },
+      "input": {
+        "method": "esewa",
+        "reference": ""
+      },
+      "name": "validate_esewa_empty_reference_rejected"
+    },
+    {
+      "expected": {
+        "error": "Enter the payment reference",
+        "valid": false
+      },
+      "input": {
+        "method": "bankTransfer",
+        "reference": ""
+      },
+      "name": "validate_bank_transfer_empty_reference_rejected"
+    },
+    {
+      "expected": {
+        "error": "Use 4 to 40 letters, numbers, - _ or /",
+        "valid": false
+      },
+      "input": {
+        "method": "esewa",
+        "reference": "A12"
+      },
+      "name": "validate_esewa_too_short_three_characters"
+    },
+    {
+      "expected": {
+        "error": null,
+        "valid": true
+      },
+      "input": {
+        "method": "esewa",
+        "reference": "A123"
+      },
+      "name": "validate_esewa_minimum_four_characters_allowed"
+    },
+    {
+      "expected": {
+        "error": null,
+        "valid": true
+      },
+      "input": {
+        "method": "esewa",
+        "reference": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "name": "validate_esewa_maximum_forty_characters_allowed"
+    },
+    {
+      "expected": {
+        "error": "Use 4 to 40 letters, numbers, - _ or /",
+        "valid": false
+      },
+      "input": {
+        "method": "esewa",
+        "reference": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "name": "validate_esewa_too_long_forty_one_characters"
+    },
+    {
+      "expected": {
+        "error": null,
+        "valid": true
+      },
+      "input": {
+        "method": "esewa",
+        "reference": "REF_123/ABC"
+      },
+      "name": "validate_esewa_allowed_punctuation_symbols"
+    },
+    {
+      "expected": {
+        "error": "Use 4 to 40 letters, numbers, - _ or /",
+        "valid": false
+      },
+      "input": {
+        "method": "esewa",
+        "reference": "REF#123@ABC"
+      },
+      "name": "validate_esewa_disallowed_special_characters"
+    },
+    {
+      "expected": {
+        "error": "duplicateReference",
+        "pass": false
+      },
+      "input": {
+        "existingGroupId": "g1",
+        "existingMethod": "esewa",
+        "existingStatus": "verified",
+        "reference": "TRX990011",
+        "submissionGroupId": "g1",
+        "submissionMethod": "esewa"
+      },
+      "name": "uniqueness_duplicate_verified_same_method_rejected"
+    },
+    {
+      "expected": {
+        "error": "duplicateReference",
+        "pass": false
+      },
+      "input": {
+        "existingGroupId": "g1",
+        "existingMethod": "esewa",
+        "existingStatus": "pendingVerification",
+        "reference": "TRX990022",
+        "submissionGroupId": "g1",
+        "submissionMethod": "esewa"
+      },
+      "name": "uniqueness_duplicate_pending_same_method_rejected"
+    },
+    {
+      "expected": {
+        "error": null,
+        "pass": true
+      },
+      "input": {
+        "existingGroupId": "g1",
+        "existingMethod": "esewa",
+        "existingStatus": "rejected",
+        "reference": "TRX990033",
+        "submissionGroupId": "g1",
+        "submissionMethod": "esewa"
+      },
+      "name": "uniqueness_duplicate_rejected_same_method_allowed"
+    },
+    {
+      "expected": {
+        "error": null,
+        "pass": true
+      },
+      "input": {
+        "existingGroupId": "g1",
+        "existingMethod": "bankTransfer",
+        "existingStatus": "verified",
+        "reference": "TRX990044",
+        "submissionGroupId": "g1",
+        "submissionMethod": "esewa"
+      },
+      "name": "uniqueness_same_reference_different_method_allowed"
+    }
+  ],
+  "domain": "payment_reference",
+  "schemaVersion": 1,
+  "source": "lib/features/payments/domain/payment_reference.dart:normalizePaymentReference,lib/features/payments/domain/payment_validators.dart:validatePaymentReference,lib/features/payments/data/repositories/mock_payments_repository.dart:MockPaymentsRepository.submitPayment"
+}
