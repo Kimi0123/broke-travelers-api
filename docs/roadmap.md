@@ -4,18 +4,20 @@ Ordered task breakdown for implementing the Broke Travelers backend API and comp
 
 ---
 
-### Task 4.3: Export Shared Test Vectors (Flutter Repository, Owner Task)
+### Task 4.3: Export Shared Test Vectors (Flutter Repository, Owner Task) — [DONE]
 - **Goal**: Export canonical test scenarios directly from the existing Dart reference implementations into golden JSON vector files.
-- **Deliverables**: Dart export script (`../broke_travelers/tool/generate_test_vectors.dart`, executed by owner) generating JSON golden files for `signedPaisa`, `verifiedBalancePaisa`, `dueDateFor`, `deriveObligationStatus`, approval rules, report builders, and reference normalization/masking. Output copied into `test/vectors/*.json` in this repository.
-- **Acceptance Tests**: Vectors comprehensively cover edge cases (leap years, due date clamping, submission tie-breakers, balance posting guards, sole treasurer reviews).
+- **Status**: **DONE** (Flutter commit `d2b0672` on branch `phase-4-vectors`).
+- **Deliverables**: Dart export generators in `tool/vectors/*` exported 7 golden files (135 total test scenarios) into `test/vectors/*.json` covering `signedPaisa`, `verifiedBalancePaisa`, `dueDateFor`, `deriveObligationStatus`, approval rules, report builders, transaction validators, and payment reference normalization/validation/uniqueness.
+- **Acceptance Tests**: All 135 cases generated directly from production Dart functions; zero floats; structurally validated against schema version 1.
 - **Flutter Impact**: Establishes reference golden test vectors for backend domain parity.
 
 ---
 
-### Task 5.1: Project Scaffold, Pure Domain Module & Test Suite
+### Task 5.1: Project Scaffold, Pure Domain Module & Test Suite — [DONE]
 - **Goal**: Initialize Node.js TypeScript project, configure tooling, port domain business logic 1:1 from Dart, and verify against golden vectors.
-- **Deliverables**: `package.json`, `tsconfig.json`, ESLint, Prettier, Vitest setup; `src/domain/` (money arithmetic, ledger math, due date clamping, obligation status derivation, approval rules); test runner executing against `test/vectors/*.json`.
-- **Acceptance Tests**: 100% unit test pass on shared vectors; zero DB or HTTP dependencies.
+- **Status**: **DONE** (Backend commits `fe9e31d`, `40c41d5`, `c8a30a1`, `107ac3d`, `626ea70`, `ffad9e5` on branch `main`).
+- **Deliverables**: TypeScript 5+ project scaffold with Node 22, strict ESLint flat config, Prettier, and Vitest; pure, dependency-free `src/domain/` module implementing `Paisa` safe integer arithmetic, `WallClock` civil calendar math, `signedPaisa`, `verifiedBalancePaisa`, `dueDateFor`, `deriveObligationStatus`, approval rules, transaction validators, payment reference normalizers, and report builders; 173 passing unit and vector tests across 9 suites.
+- **Acceptance Tests**: 100% pass on all 135 golden test vectors; zero DB, HTTP, or runtime dependencies.
 - **Flutter Impact**: None (backend standalone).
 
 ---
@@ -23,6 +25,8 @@ Ordered task breakdown for implementing the Broke Travelers backend API and comp
 ### Task 5.2: Database Schema, Prisma Migrations & Concurrency Verification
 - **Goal**: Provision PostgreSQL via Docker Compose, apply Prisma schema, configure immutability triggers, and verify posting concurrency.
 - **Deliverables**: `docker-compose.yml`, `prisma/schema.prisma`, initial migration with append-only triggers (`ledger_entries`, `audit_log`) and partial unique indexes; transaction posting service with `FOR UPDATE` group locks; integration test suite.
+- **Requirements**:
+  - `payment_submissions` table must include `seq BIGINT GENERATED ALWAYS AS IDENTITY` so submission insertion order is monotonic, reproducible, and provides deterministic tie-breaking for `deriveObligationStatus`.
 - **Acceptance Tests**: Migrations execute cleanly; 10 concurrent requests attempting to post against balance are serialized without overdraw; raw `UPDATE`/`DELETE` on ledger entries is rejected.
 - **Flutter Impact**: None.
 

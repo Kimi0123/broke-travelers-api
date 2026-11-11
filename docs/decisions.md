@@ -110,3 +110,44 @@ To guarantee strict 1:1 parity with the Flutter client, test vectors are GENERAT
 - **Payment Gateway Integrations**: Direct API webhooks with eSewa/Khalti out-of-scope; recordkeeping only.
 - **Phone / SMS Authentication**: Omitted due to SMS gateway costs; email/password and Google sign-in only.
 - **App Store / Play Store Publishing**: Distribution to testing group via direct APK and TestFlight.
+
+---
+
+## 12. Domain Module Conventions
+
+The `src/domain/` module contains the 1:1 pure TypeScript port of all financial, obligation, approval, and reporting logic from the Dart reference implementation. It adheres to the following conventions:
+
+### 12.1 Monetary Representation (`Paisa` Branded Safe Integers)
+- Money is strictly denominated in integer paisa (1 NPR = 100 paisa) using TypeScript branded safe integers (`type Paisa = number & { readonly [PaisaBrand]: typeof PaisaBrand }`).
+- **Why Safe Integers over BigInt or Decimal.js**:
+  - JavaScript safe integers represent integers precisely up to `Number.MAX_SAFE_INTEGER` ($2^{53} - 1 \approx 9 \times 10^{15}$ paisa, or 90 trillion NPR).
+  - Individual transactions in Broke Travelers are capped at $1,000,000,000$ paisa ($10,000,000$ NPR), comfortably within safe integer boundaries.
+  - Safe integers serialize natively to JSON as standard numbers without requiring custom serializers (BigInt requires `BigInt.prototype.toJSON` or custom replacers) and avoid runtime library overhead (`decimal.js`, `bignumber.js`), keeping the domain module zero-dependency.
+  - Type branding prevents mixing monetary paisa with raw numbers or loop counters at compile time.
+  - Runtime guards (`assertPaisa`, `addPaisa`, `subtractPaisa`, `multiplyPaisa`) reject non-integers, `NaN`, `Infinity`, and safe integer overflow.
+
+### 12.2 WallClock Pure Civil Calendar Representation
+- Built-in JavaScript `Date` incorporates ambient timezone offsets, daylight saving transitions, and mutating methods that make financial calculations nondeterministic.
+- `WallClock` represents calendar date-time values `{ y, m, d, h, mi, s, ms }` purely as civil time using Howard Hinnant's calendar algorithms.
+- All domain functions accept an explicit `now: WallClock` parameter rather than reading system time or `Date.now()`, ensuring 100% deterministic test execution and replayability.
+
+### 12.3 DomainError Codes
+- Domain exceptions inherit from `DomainError` with stable, machine-readable codes matching Dart exception names:
+  - `invalidInput`: Malformed parameters, out-of-range dates, or invalid transaction kinds.
+  - `groupAccess`: Unknown group ID or non-member viewer.
+  - `permissionDenied`: Insufficient role (e.g. non-treasurer recording transactions).
+  - `insufficientBalance`: Attempted expense or withdrawal exceeds verified group balance.
+  - `duplicateReference`: Payment reference already exists in active status for the same method.
+  - `conflict`: Concurrent state conflict or expired approval action.
+  - `notFound`: Target entity does not exist.
+  - `unknown`: Unexpected internal state error.
+- Machine-readable codes map cleanly to HTTP status envelopes in Phase 5.3+ without leaking raw internal exception strings to clients.
+
+### 12.4 Obligation Status Input Ordering
+- In `deriveObligationStatus`, when evaluating member submissions for a given contribution period, candidate entries must be ordered by `(occurredAt DESC, id DESC)` (or monotonic database sequence `seq DESC`).
+- The latest submission determines the member's current status for the period (e.g., a rejected submission occurring after a pending submission marks the period as `rejected`, not `pendingVerification`).
+
+### 12.5 Payment Reference Masking
+- The Flutter client UI (`my_payments_screen.dart:85`) rendered payment references of 4 characters or fewer in full plain text.
+- The backend API enforces privacy protection: any reference of 4 characters or fewer is strictly masked as `'Ref ••••'` to prevent leaking short credentials or transaction codes to activity feeds or non-privileged viewers. For references longer than 4 characters, it returns `'Ref ••••'` followed by the last 4 characters (e.g., `'Ref ••••3456'`).
+

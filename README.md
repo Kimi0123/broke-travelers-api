@@ -6,26 +6,59 @@ Broke Travelers is an immutable financial ledger and group transparency recordke
 
 ## Tech Stack
 - **Runtime & Language**: Node.js (v22+) with TypeScript (strict mode)
-- **Framework**: Express.js
-- **Database & ORM**: PostgreSQL with Prisma ORM
-- **Authentication**: Firebase Authentication (ID token verification server-side; email/password & Google sign-in)
+- **Framework**: Express.js (Phase 5.3+)
+- **Database & ORM**: PostgreSQL with Prisma ORM (Phase 5.2+)
+- **Authentication**: Firebase Authentication (Phase 5.3+)
+- **Testing**: Vitest with 1:1 golden vectors ported from Dart
 
 ## Relation to Flutter Client
 The Flutter mobile application lives in the sibling directory (`../broke_travelers`). That repository serves as the executable specification of all business and financial logic through its mock repository suite. The Flutter repository is treated as strictly read-only by backend tooling.
 
 ## Current Status
-**Design phase (Task 5.0) — no application code yet.**
-All design documents, data models, domain rules, and API specifications have been extracted, audited, and reviewed prior to project scaffolding.
+**Phase 5.1 complete — pure domain module ported and verified.**
+The dependency-free `src/domain/` module contains the 1:1 TypeScript port of all financial logic, ledger math, due dates, obligation status, approval quorum, and report builders. Parity is proven across 135 golden test vectors generated from the production Dart code. No HTTP or database layer yet (scheduled for Tasks 5.2+).
 
-## Deployment Context
-- **Target Audience**: Small friend circles (~6 members per group) sharing shared travel fund accounts.
-- **Development**: Local PostgreSQL running via Docker Compose (`docker compose up`).
-- **Staging / Initial Production**: Low-cost or free managed tiers (e.g., Render web service + Neon serverless PostgreSQL).
-- **Backups**: Automated cron `pg_dump` snapshots sent to owner-controlled storage, verified with routine restore drill tests to mitigate free-tier retention limits.
+## Domain Module Layout (`src/domain/`)
+- `money.ts`: `Paisa` branded safe integer monetary arithmetic (no floating-point, integer paisa only)
+- `wall-clock.ts`: Pure civil calendar representation and Hinnant arithmetic (no `Date` or system clock)
+- `month-math.ts`: Civil month start and next month calculations
+- `enums.ts`: Domain enums (`ActivityKind`, `PaymentStatus`, `PaymentMethod`, `GroupRole`, `ApprovalStatus`)
+- `errors.ts`: Typed `DomainError` and functional `Result` monad
+- `types.ts`: Core domain interfaces (`LedgerEntry`, `GroupMember`)
+- `ledger-math.ts`: `signedPaisa` and `verifiedBalancePaisa` calculations
+- `due-dates.ts`: `dueDateFor` calendar due date derivation and clamping
+- `obligation-status.ts`: `deriveObligationStatus` contribution state machine
+- `approval-rules.ts`: Quorum thresholds, early rejection, expiry, and status resolution
+- `transaction-validators.ts`: Direct transaction and reversal reason validators
+- `payment-reference.ts`: Payment reference normalization (`normalizePaymentReference`)
+- `payment-validators.ts`: Reference and note validators, duplicate detection
+- `reference-masking.ts`: Privacy reference masking (`maskPaymentReference`)
+- `report-types.ts` & `report-builders.ts`: Monthly, member, annual, and outflow financial reports
+
+## Development
+Requirements: Node.js >= 22.0.0 and npm >= 10.0.0.
+
+```bash
+# Install dependencies
+npm ci
+
+# Run unit and golden vector tests
+npm test
+
+# Lint and typecheck
+npm run lint
+npm run typecheck
+
+# Format check
+npm run format:check
+
+# Build TypeScript to dist/
+npm run build
+```
 
 ## Documentation Index
-- [`docs/domain-rules.md`](docs/domain-rules.md): Authoritative business rules extracted from the Flutter client codebase.
-- [`docs/schema.md`](docs/schema.md): Relational PostgreSQL database schema, append-only ledger guarantees, constraints, and concurrency model.
-- [`docs/api-contract.md`](docs/api-contract.md): Versioned REST API specification (`/v1`), endpoints, request/response envelopes, and idempotency semantics.
-- [`docs/decisions.md`](docs/decisions.md): Architecture recommendations, trade-off analyses, security controls, and testing strategy.
-- [`docs/roadmap.md`](docs/roadmap.md): Phased execution roadmap for Phase 5 implementation tasks.
+- [`docs/domain-rules.md`](docs/domain-rules.md): Authoritative business rules extracted from Flutter client.
+- [`docs/schema.md`](docs/schema.md): Relational PostgreSQL schema, immutability triggers, and concurrency.
+- [`docs/api-contract.md`](docs/api-contract.md): Versioned REST API specification (`/v1`) and envelopes.
+- [`docs/decisions.md`](docs/decisions.md): Architecture recommendations, domain conventions, and security.
+- [`docs/roadmap.md`](docs/roadmap.md): Phased execution roadmap for Phase 5 tasks.
