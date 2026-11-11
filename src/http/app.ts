@@ -5,18 +5,21 @@ import { pino } from 'pino';
 import { pinoHttp } from 'pino-http';
 import type { PrismaClient } from '@prisma/client';
 import type { Logger } from 'pino';
+import type { TokenVerifier } from '../application/ports/token-verifier.js';
 import type { AppConfig } from '../config/env.js';
 import { generateId } from '../infrastructure/db/ids.js';
 import { createErrorHandler } from './errors.js';
 import { requestIdMiddleware } from './middleware/request-id.js';
+import { createProfileRouter } from './routes/profile.js';
+import { createSessionRouter } from './routes/session.js';
 
 export interface AppDependencies {
   readonly prisma: PrismaClient;
   readonly config: AppConfig;
-  readonly tokenVerifier?: unknown;
-  readonly clock?: () => Date;
-  readonly idGenerator?: () => string;
-  readonly logger?: Logger;
+  readonly tokenVerifier?: TokenVerifier | undefined;
+  readonly clock?: (() => Date) | undefined;
+  readonly idGenerator?: (() => string) | undefined;
+  readonly logger?: Logger | undefined;
 }
 
 export function createApp(deps: AppDependencies): Express {
@@ -94,6 +97,24 @@ export function createApp(deps: AppDependencies): Express {
       });
     }
   });
+
+  // Authenticated routes
+  if (deps.tokenVerifier) {
+    app.use(
+      createSessionRouter({
+        prisma: deps.prisma,
+        tokenVerifier: deps.tokenVerifier,
+        config: deps.config,
+        idGenerator: deps.idGenerator,
+      }),
+    );
+    app.use(
+      createProfileRouter({
+        prisma: deps.prisma,
+        tokenVerifier: deps.tokenVerifier,
+      }),
+    );
+  }
 
   // 404 handler for unknown routes
   app.use((req, res) => {

@@ -1,19 +1,30 @@
 import { pino } from 'pino';
+import type { TokenVerifier } from './application/ports/token-verifier.js';
 import { loadConfig } from './config/env.js';
 import { createApp } from './http/app.js';
 import {
   disconnectPrismaClient,
   getPrismaClient,
 } from './infrastructure/db/client.js';
+import { FirebaseTokenVerifier } from './infrastructure/firebase/firebase-token-verifier.js';
 
 const config = loadConfig();
 const logger = pino({ level: config.LOG_LEVEL });
 const prisma = getPrismaClient(config.DATABASE_URL);
 
+let tokenVerifier: TokenVerifier | undefined;
+if (config.FIREBASE_PROJECT_ID || config.FIREBASE_SERVICE_ACCOUNT_JSON) {
+  tokenVerifier = new FirebaseTokenVerifier({
+    firebaseProjectId: config.FIREBASE_PROJECT_ID,
+    firebaseServiceAccountJson: config.FIREBASE_SERVICE_ACCOUNT_JSON,
+  });
+}
+
 const app = createApp({
   prisma,
   config,
   logger,
+  tokenVerifier,
 });
 
 const server = app.listen(config.PORT, () => {
