@@ -12,7 +12,7 @@ import { endOfDayInclusive, isAfter, type WallClock } from './wall-clock.js';
 export function signedPaisa(entry: {
   readonly kind: ActivityKind;
   readonly magnitudePaisa: Paisa;
-  readonly reversesEntryId?: string | null;
+  readonly reversesEntryId?: string | null | undefined;
 }): Paisa {
   const outflowMultiplier = isOutflow(entry.kind) ? -1 : 1;
   const reversalMultiplier = entry.reversesEntryId != null ? -1 : 1;

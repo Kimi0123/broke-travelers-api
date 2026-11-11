@@ -12,3 +12,5 @@ export * from './transaction-validators.js';
 export * from './payment-reference.js';
 export * from './payment-validators.js';
 export * from './reference-masking.js';
+export * from './report-types.js';
+export * from './report-builders.js';

@@ -19,11 +19,11 @@ export interface LedgerEntry {
   readonly occurredAt: WallClock;
   readonly magnitudePaisa: Paisa;
   readonly status: PaymentStatus;
-  readonly memberId?: string | null;
-  readonly paymentMethod?: PaymentMethod | null;
-  readonly note?: string | null;
-  readonly periodMonth?: WallClock | null;
-  readonly reversesEntryId?: string | null;
+  readonly memberId?: string | null | undefined;
+  readonly paymentMethod?: PaymentMethod | null | undefined;
+  readonly note?: string | null | undefined;
+  readonly periodMonth?: WallClock | null | undefined;
+  readonly reversesEntryId?: string | null | undefined;
 }
 
 /**
@@ -41,9 +41,9 @@ export function effectivePeriodMonth(entry: LedgerEntry): WallClock {
 export interface GroupMember {
   readonly id: string;
   readonly name: string;
-  readonly roles?: readonly GroupRole[] | ReadonlySet<GroupRole>;
+  readonly roles?: readonly GroupRole[] | ReadonlySet<GroupRole> | undefined;
   readonly joinedAt: WallClock;
-  readonly leftAt?: WallClock | null;
-  readonly expectedPaisa?: Paisa;
-  readonly userId?: string | null;
+  readonly leftAt?: WallClock | null | undefined;
+  readonly expectedPaisa?: Paisa | undefined;
+  readonly userId?: string | null | undefined;
 }
