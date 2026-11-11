@@ -5,7 +5,9 @@
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'migration_owner') THEN
-    CREATE ROLE migration_owner WITH LOGIN PASSWORD 'migration_owner_local_dev_secret';
+    CREATE ROLE migration_owner WITH LOGIN CREATEDB PASSWORD 'migration_owner_local_dev_secret';
+  ELSE
+    ALTER ROLE migration_owner CREATEDB;
   END IF;
 
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'api_user') THEN
