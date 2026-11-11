@@ -230,7 +230,17 @@ export async function postLedgerEntry(
     });
 
     const occurredAtDate = toDate(input.occurredAt) ?? new Date();
-    const periodMonthDate = toDateOnly(input.periodMonth);
+    let periodMonthDate: Date | null = null;
+    let memberId: string | null = null;
+
+    if (input.kind === 'contribution') {
+      periodMonthDate =
+        toDateOnly(input.periodMonth) ?? toDateOnly(occurredAtDate);
+      memberId = input.memberId ?? input.actorMemberId;
+    } else {
+      periodMonthDate = null;
+      memberId = input.memberId ?? null;
+    }
 
     // 6. Insert new ledger row (identity column assigns seq)
     const newId = generateId();
@@ -243,7 +253,7 @@ export async function postLedgerEntry(
         magnitudePaisa: BigInt(magNum),
         occurredAt: occurredAtDate,
         postedAt: new Date(),
-        memberId: input.memberId ?? null,
+        memberId,
         periodMonth: periodMonthDate,
         paymentMethod: input.paymentMethod ?? null,
         note: input.note?.trim() ?? null,
