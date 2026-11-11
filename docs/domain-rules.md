@@ -38,7 +38,7 @@ Every rule cites its source file and symbol in the Flutter codebase and indicate
 4. **Immutable Contribution Schedule**: Monthly expected contribution cannot be edited directly via settings until an effective-from schedule is implemented, preventing retroactive changes to historical obligations.
    - *Source*: `README.md:75`, `AGENTS.md:43`.
    - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
-5. **Invitation Joining**: Users join via single-use 8-character invitation codes (`[2-9A-HJ-NP-Z]`). Joining assigns `GroupRole.member`. Code expires in 7 days.
+5. **Invitation Joining & Rejoining**: Users join via single-use 8-character invitation codes (`[2-9A-HJ-NP-Z]`). Joining assigns `GroupRole.member`. Code expires in 7 days. If a former member rejoins, a NEW membership record is created; historical ledger entries retain their original membership ID.
    - *Source*: `lib/features/group/data/repositories/mock_invitations_repository.dart: acceptInvitation:168`, `invitation_code.dart`.
    - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
 6. **Invitation Brute-Force Lockout**: 5 failed invitation attempts within 5 minutes locks out the user (`InvitationErrorCode.tooManyAttempts`).
@@ -60,18 +60,19 @@ Every rule cites its source file and symbol in the Flutter codebase and indicate
 ---
 
 ## 3. Contribution Periods and Obligations
-1. **Calendar Periods**: Periods align to calendar months (`YYYY-MM`). Period start is midnight on the 1st day of the month.
+1. **Calendar Periods**: Periods align to calendar months (`YYYY-MM`). Period start is midnight on the 1st day of the month in Nepal Standard Time (UTC+05:45).
    - *Source*: `lib/core/mock/month_math.dart: monthStart`.
    - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
 2. **Due Date Clamping**: The payment due date is constructed from `group.dueDay` clamped to the last valid day of the month (e.g. 28/29 in Feb, 30 in Apr), preventing date rollover into the next month.
    - *Source*: `lib/shared/utils/calendar_date_utils.dart: dueDateFor:46`.
    - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
-3. **Obligation Derivation**: A member's period obligation status is derived by inspecting all contribution submissions for that period sorted by `occurredAt` descending (latest submission wins):
+3. **Obligation Derivation & Tie-Breaking**: A member's period obligation status is derived by inspecting all contribution submissions for that period sorted by occurrence time descending (`second.occurredAt.compareTo(first.occurredAt)`), using list insertion index descending (`entryIndexes[second.id]!.compareTo(entryIndexes[first.id]!)`) as a tie-breaker. The first/latest submission determines the status:
    - Latest submission `verified` -> `PaymentStatus.verified`.
    - Latest submission `pendingVerification` -> `PaymentStatus.pendingVerification`.
    - Latest submission `rejected` -> `PaymentStatus.rejected`.
    - No submission: if `periodStart < anchorPeriodStart` -> `PaymentStatus.overdue`, else `PaymentStatus.notSubmitted`.
-   - *Source*: `lib/core/mock/obligation_status.dart: deriveObligationStatus:14`.
+   - In the database schema, this ordering maps to `submitted_at DESC, id DESC`.
+   - *Source*: `lib/core/mock/obligation_status.dart: deriveObligationStatus:14-45`.
    - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
 4. **Historical Obligations of Removed Members**: Members are obligated for past periods where `member.joinedAt < periodEnd` and `(member.leftAt == null || !member.leftAt!.isBefore(periodEnd))`.
    - *Source*: `lib/features/contributions/data/repositories/mock_contributions_repository.dart: _obligations:99`.
@@ -95,7 +96,7 @@ Every rule cites its source file and symbol in the Flutter codebase and indicate
 5. **Treasurer Verification**: Only a Treasurer may verify or reject pending payments. Verification creates a verified ledger entry; rejection requires a reason (`notReceived`, `wrongAmount`, `referenceNotFound`, `other`) and optional note (<= 200 chars), allowing resubmission.
    - *Source*: `lib/features/payments/data/repositories/mock_payments_repository.dart: verifyPayment:513`, `rejectPayment:537`.
    - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
-6. **Masked References**: Unprivileged viewers (and the submitter in payment lists) only see masked references (e.g. `Ref ••••3456`). Full references are visible only to Treasurers in pending review queues. Updates/notifications never expose references.
+6. **Masked References**: Unprivileged viewers (and the submitter in payment lists) see references formatted via `'Ref ••••' + reference.substring(reference.length > 4 ? reference.length - 4 : 0)`. If a reference is 4 characters or shorter (e.g. `"12"`), it prepends `'Ref ••••'` and displays the full string (e.g. `'Ref ••••12'`). Full references are visible only to Treasurers in pending review queues. Updates/notifications never expose references.
    - *Source*: `lib/features/payments/presentation/screens/my_payments_screen.dart:85`, `mock_updates_repository_test.dart:265`.
    - *Status*: `ENFORCED_IN_APP_ONLY` (masking) & `ENFORCED_IN_MOCK_REPOSITORY` (updates privacy).
 
@@ -114,8 +115,8 @@ Every rule cites its source file and symbol in the Flutter codebase and indicate
 4. **Append-Only Immutability**: Posted ledger entries are never modified (`UPDATE`) or deleted (`DELETE`).
    - *Source*: `AGENTS.md:28`, `README.md:38`.
    - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
-5. **Reversals**: Reversals are supported exclusively for verified `expense` and `interest` entries. A reversal creates a separate linked entry (`reversesEntryId: original.id`) with inverted sign. Reversals cannot be reversed; an entry cannot be reversed twice. Original entries are never altered.
-   - *Source*: `lib/features/transactions/data/repositories/mock_transactions_repository.dart: reverseTransaction:235`.
+5. **Reversals Restricted to Expense and Interest**: Reversals are supported exclusively for verified `expense` and `interest` entries (`mock_transactions_repository.dart:257-263`). `withdrawal` and `contribution` entries CANNOT be reversed (reversal attempts throw `notReversible`). A reversal creates a separate linked entry (`reversesEntryId: original.id`) with inverted sign. Reversals cannot be reversed; an entry cannot be reversed twice.
+   - *Source*: `lib/features/transactions/data/repositories/mock_transactions_repository.dart: reverseTransaction:235-263`.
    - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
 6. **Direct Transaction Kinds**: Treasurers may directly record only `interest` and `expense` entries. `withdrawal` cannot be recorded directly and must proceed through Approvals.
    - *Source*: `lib/features/transactions/domain/transaction_validators.dart: isRecordableKind:32`.
@@ -206,7 +207,7 @@ Every rule cites its source file and symbol in the Flutter codebase and indicate
 ## 11. Error Taxonomy
 | Exception Symbol | Source File | HTTP Status | Machine Code | Fixed User-Visible Message |
 |---|---|---|---|---|
-| `GroupAccessException` | `lib/core/error/group_access_exception.dart` | 403 / 404 | `group_access_denied` | Group not found or access denied |
+| `GroupAccessException` | `lib/core/error/group_access_exception.dart` | 403 / 404 | `group_access_denied` / `group_not_found` | Group not found or access denied |
 | `PermissionDeniedException` | `lib/core/error/permission_denied_exception.dart` | 403 | `forbidden` | You do not have permission to perform this action |
 | `GroupCreationException` | `lib/core/error/group_creation_exception.dart` | 409 | `group_creation_failed` | Unable to create group for this user |
 | `GroupValidationException` | `lib/core/error/group_validation_exception.dart` | 400 | `invalid_group_settings` | Group name or due day failed validation |
@@ -220,9 +221,9 @@ Every rule cites its source file and symbol in the Flutter codebase and indicate
 | `AuthException(weakPassword)` | `lib/features/authentication/domain/auth_exception.dart` | 400 | `weak_password` | Password does not meet security requirements |
 | `InvitationException(invalidCode)` | `lib/features/group/domain/repositories/invitations_repository.dart` | 400 | `invalid_invitation_code` | Invitation code is invalid or expired |
 | `InvitationException(alreadyInGroup)` | `lib/features/group/domain/repositories/invitations_repository.dart` | 409 | `already_in_group` | You are already a member of a group |
-| `InvitationException(tooManyAttempts)` | `lib/features/group/domain/repositories/invitations_repository.dart` | 429 | `too_many_attempts` | Too many attempts. Please try again later. |
-| `PaymentSubmissionException(notObligated)` | `lib/features/payments/domain/payment_submission_exception.dart` | 400 | `not_obligated` | You are not obligated for this contribution period |
-| `PaymentSubmissionException(periodNotOpen)` | `lib/features/payments/domain/payment_submission_exception.dart` | 400 | `period_not_open` | This contribution period is not open |
+| `InvitationException(tooManyAttempts)` | `lib/features/group/domain/repositories/invitations_repository.dart` | 429 | `too_many_attempts` | Too many attempts; please try again later |
+| `PaymentSubmissionException(notObligated)` | `lib/features/payments/domain/payment_submission_exception.dart` | 400 | `not_obligated` | You are not obligated for this period |
+| `PaymentSubmissionException(periodNotOpen)` | `lib/features/payments/domain/payment_submission_exception.dart` | 400 | `period_not_open` | This period is not open for submission |
 | `PaymentSubmissionException(alreadySubmitted)` | `lib/features/payments/domain/payment_submission_exception.dart` | 409 | `already_submitted` | Payment already submitted for this period |
 | `PaymentSubmissionException(duplicateReference)` | `lib/features/payments/domain/payment_submission_exception.dart` | 409 | `duplicate_reference` | A payment with this reference is already recorded |
 | `PaymentSubmissionException(invalidInput)` | `lib/features/payments/domain/payment_submission_exception.dart` | 400 | `invalid_payment_input` | Payment details failed validation |
@@ -237,7 +238,7 @@ Every rule cites its source file and symbol in the Flutter codebase and indicate
 | `TransactionRecordingException(alreadyReversed)` | `lib/features/transactions/domain/transaction_recording_exception.dart` | 409 | `transaction_already_reversed` | Transaction has already been reversed |
 | `ApprovalException(invalidInput)` | `lib/features/approvals/domain/approval_exception.dart` | 400 | `invalid_approval_input` | Approval input failed validation |
 | `ApprovalException(insufficientBalance)` | `lib/features/approvals/domain/approval_exception.dart` | 409 | `insufficient_balance` | Amount exceeds verified balance |
-| `ApprovalException(notEnoughMembers)` | `lib/features/approvals/domain/approval_exception.dart` | 400 | `not_enough_members` | At least two active members are required for an approval request |
+| `ApprovalException(notEnoughMembers)` | `lib/features/approvals/domain/approval_exception.dart` | 400 | `not_enough_members` | Group needs at least two members for approvals |
 | `ApprovalException(notFound)` | `lib/features/approvals/domain/approval_exception.dart` | 404 | `approval_not_found` | Approval request not found |
 | `ApprovalException(notOpen)` | `lib/features/approvals/domain/approval_exception.dart` | 409 | `approval_not_open` | Approval request is closed or expired |
 | `ApprovalException(notApproved)` | `lib/features/approvals/domain/approval_exception.dart` | 409 | `approval_not_approved` | Request has not reached approval threshold |
@@ -252,12 +253,12 @@ Every rule cites its source file and symbol in the Flutter codebase and indicate
 
 ## Gaps and Ambiguities
 1. **FIN-1 (Ledger Status Mutation)**: The Flutter mock mutates `MockLedgerEntry.status` in-place on payment review and stores pending submissions in `group.entries`. The backend resolves this by maintaining a separate `payment_submissions` table; verified reviews insert an immutable ledger entry in the same transaction.
-2. **FIN-2 (Obligation Status Derivation Divergence)**: Audit found `report_builders.dart` had previously diverged from `deriveObligationStatus`. The backend standardizes on a single canonical SQL/domain query ordering submissions by `occurredAt DESC`.
-3. **FIN-3 (Idempotency Key Scope and Expiry)**: Mock repositories lack idempotency keys. The backend enforces `Idempotency-Key` headers on all financial POSTs, keyed by `(group_id, actor_user_id, operation, idempotency_key)` with a 48-hour retention window.
-4. **FIN-4 (Cumulative Balance Summation Loops)**: Mock repositories duplicate balance summation loops in 4 places. In the backend, balance calculation is unified in a single database function/query.
+2. **FIN-2 (Obligation Status Derivation & Ordering Field)**: In the Flutter mock (`obligation_status.dart:36-40`), obligation derivation sorts entries by `occurredAt DESC` with list index descending as tie-break. In the backend schema, submissions are sorted by `submitted_at DESC, id DESC`. The TypeScript domain function implements this single canonical derivation.
+3. **FIN-3 (Idempotency Key Scope and Expiry)**: Mock repositories lack idempotency keys. The backend enforces `Idempotency-Key` headers on all financial POSTs, keyed by `(group_id, actor_user_id, operation, idempotency_key)` (or user-scoped when `group_id IS NULL`) with a 48-hour retention window.
+4. **FIN-4 (Single TypeScript Implementation for Balance)**: Rather than duplicating financial logic in SQL stored procedures or multiple cumulative loops, the backend maintains a SINGLE TypeScript implementation of `signedPaisa` and `verifiedBalancePaisa`. The server loads the group's ledger rows inside the group-locked transaction and evaluates balance in-memory. SQL `SUM` queries are reserved for monitoring/sanity checks and verified by parity tests.
 5. **FIN-5 (Audit Timestamp Backdating)**: Mock `postVerifiedEntry` previously logged client `occurredAt` as audit time. Backend audit logs strictly record the server database timestamp (`NOW()`).
 6. **FIN-6 (Due Day Month Overflow)**: `dueDay > 28` is clamped to the last day of each month in `dueDateFor`. The backend enforces this identical clamping logic when computing period due dates.
 7. **FIN-7 & Timezone Normalization (FIN-8)**: Nepal Standard Time is UTC+05:45 without Daylight Saving Time. The server stores all timestamps in UTC ISO-8601, but interprets calendar day boundaries (`asOf` end-of-day, period months, and due dates) in NPT (+05:45).
 8. **Multi-Group Membership vs Single-Group Mock**: Mock `MockGroupStore` maps one group per user (`membershipByUserId`). In PostgreSQL, a user may belong to multiple groups; every request must supply `groupId` in the URL path.
-9. **Re-Invited Members and Identity**: If a removed member rejoins with an invitation, a new membership record is created. Their previous contributions retain the original member record linkage.
-10. **Masked Reference Format**: When a reference is shorter than 4 characters, mock formatting falls back to masking all characters; the backend emits standard last-4 masking `••••1234` or `••••` if <= 4 chars.
+9. **Re-Invited Members and Partial Unique Index**: When a removed member rejoins with an invitation, a new `group_memberships` row is created (`joined_at = NOW()`, `left_at = NULL`). Historical payments remain linked to the old member ID. To allow rejoining while preventing concurrent active memberships, the database uses a partial unique index on `(group_id, user_id) WHERE left_at IS NULL`.
+10. **Masked Reference Format**: In the Flutter app (`my_payments_screen.dart:85`), masking prepends `'Ref ••••'` and takes up to the last 4 characters (`reference.substring(reference.length > 4 ? reference.length - 4 : 0)`). For short references (`<= 4` chars), it does NOT replace characters with bullets; it outputs `'Ref ••••'` followed by all characters (e.g. `'Ref ••••12'`). The backend adopts this exact rule.

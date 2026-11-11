@@ -14,14 +14,22 @@ Design recommendations and trade-off analyses for the Broke Travelers backend RE
 
 ---
 
-## 2. Validation & Serialization
+## 2. Single Implementation of Financial Logic
+**Recommendation**: The pure TypeScript domain functions (ported 1:1 from Dart) are the SOLE authority.
+- The server loads group ledger rows and submissions inside a row-locked transaction (`SELECT id FROM groups WHERE id = $1 FOR UPDATE`) and computes verified balances and obligations in memory using the domain functions.
+- For ~6 members (~100-300 rows/year), memory evaluation takes `< 2ms` and eliminates duplicate SQL logic drift.
+- SQL `SUM` queries are reserved for background health/monitoring checks and verified by parity tests.
+
+---
+
+## 3. Validation & Serialization
 **Recommendation**: **Zod** schema validation.
 - Validates boundary inputs (params, query, body) and parses strictly typed DTOs.
 - *Trade-off*: Slightly higher runtime overhead than TypeBox/Ajv, but offers superior TypeScript type inference, zero build-step requirement, and expressive custom validations.
 
 ---
 
-## 3. Testing Strategy
+## 4. Testing Strategy
 **Recommendation**: **Vitest** with separated test suites.
 - **Unit Suite (Domain)**: Pure in-memory unit tests for domain functions without DB or network, executing in `< 1s`.
 - **Integration Suite**: Runs against a real PostgreSQL instance via Docker Compose.
@@ -30,59 +38,60 @@ Design recommendations and trade-off analyses for the Broke Travelers backend RE
 
 ---
 
-## 4. Logging & Configuration
+## 5. Logging, Configuration & Reverse Proxy
 - **Logging**: **Pino** for structured JSON logging with request-ID propagation (`X-Request-Id`) and automatic field redaction (`headers.authorization`, `reference`, `password`).
 - **Configuration**: `dotenv` with a strict Zod `env.ts` schema. The service fails immediately on startup if any required environment variable is missing or malformed.
+- **Reverse Proxy**: Configure `app.set('trust proxy', 1)` so Express accurately extracts client IPs from `X-Forwarded-For` behind Render / Railway / Cloudflare reverse proxies for rate limiting.
 
 ---
 
-## 5. Firebase Admin & Authentication
+## 6. Firebase Admin & Authentication
 - **Production**: Firebase Admin SDK verifying JWT ID tokens via Google public certificates.
 - **Testing**: Firebase Auth Emulator (`FIREBASE_AUTH_EMULATOR_HOST`) for local and CI integration testing without hitting Google servers.
 - *Trade-off*: Real Firebase keys not required in CI; tests remain isolated and deterministic.
 
 ---
 
-## 6. Database Migrations & Prisma
-- **Tool**: Prisma Migrate.
-- **Workflow**: `prisma migrate dev` for local schema iterations; `prisma migrate deploy` executed during container/app startup in staging.
-- **Immutability Enforcement**: Migration scripts will include raw SQL triggers revoking `UPDATE` and `DELETE` on `ledger_entries` and `audit_log`.
+## 7. Database Roles, Migrations & Neon Connection Pooling
+- **Roles**:
+  - `migration_owner`: DDL permissions, executes Prisma migrations, creates raw append-only triggers and partial unique indexes.
+  - `api_user`: Runtime role used by Express. Has `SELECT`, `INSERT`, `UPDATE` (except on immutable tables); strictly `REVOKE UPDATE, DELETE ON ledger_entries, audit_log`.
+- **Neon Configuration**:
+  - `DATABASE_URL`: Pooled connection string (`port 6543`, `?pgbouncer=true`, pool max = 5) for application runtime, respecting free-tier connection limits (e.g. 20 connections max).
+  - `DIRECT_URL`: Non-pooled direct connection string (`port 5432`) configured as `directUrl` in `schema.prisma` for executing schema migrations, partial indexes, and raw triggers.
 
 ---
 
-## 7. Staging Deployment & Neon/Render Optimization
-- **Compute**: Render / Railway Web Service (Node.js).
-- **Database**: Neon Serverless PostgreSQL (free/starter tier).
-- **Region**: Mumbai (`ap-south-1`) or Singapore (`ap-southeast-1`) for lowest latency to Nepal.
-- **Connection Management**: Prisma configured with Neon pooled connection string (`?pgbouncer=true` or pool limit = 5) to prevent exhausting free-tier connection limits (e.g. 20 concurrent connections).
-- **Cold Starts**: Render free instances spin down after inactivity. Implement `/v1/health` with a lightweight ping; client sets a 30s initial connect timeout and reuses `Idempotency-Key` on retry.
+## 8. Staging Deployment & Backups
+- **Compute**: Render / Railway Web Service (Node.js). Region: Mumbai (`ap-south-1`) or Singapore (`ap-southeast-1`) for lowest latency to Nepal.
+- **Backups**: Render free instances do not support standing cron daemons. Automated backups are executed via a scheduled GitHub Actions workflow in this repository running `pg_dump -Fc` using `DIRECT_URL` stored as a secret, uploading encrypted dumps to owner-controlled S3/R2 storage. Monthly local restore drills verify dump validity.
 
 ---
 
-## 8. Continuous Integration (CI)
-GitHub Actions workflow on PRs to `main`:
-1. `npm run lint` & `npm run format:check`
-2. `npm run typecheck` (`tsc --noEmit`)
-3. `npm run test:unit` (pure domain tests)
-4. PostgreSQL service container initialization -> `prisma migrate deploy` -> `npm run test:integration`.
-
----
-
-## 9. 1:1 Domain Parity & Shared Test Vectors
-To guarantee identical financial behavior between the Flutter mock and Node.js backend, extract test fixtures into shared JSON scenario vectors (`test/vectors/*.json`):
-```json
-{
-  "scenario": "due_day_clamping_leap_year",
-  "input": { "year": 2024, "month": 2, "dueDay": 31 },
-  "expected": { "year": 2024, "month": 2, "day": 29 }
-}
-```
-Both Dart tests (`flutter test`) and Node.js tests (`vitest`) ingest the exact same vector files.
+## 9. Shared Test Vectors Generated from Dart Reference
+To guarantee strict 1:1 parity with the Flutter client, test vectors are GENERATED AS GOLDEN FILES directly from the Dart domain functions in `../broke_travelers`:
+- **Generator**: A Dart script in the Flutter repository (`tool/generate_test_vectors.dart`, executed by the owner) exports canonical test scenarios into JSON files.
+- **Location**: Committed into this repository under `test/vectors/*.json`.
+- **Schema**:
+  ```json
+  {
+    "suite": "obligation_status",
+    "version": 1,
+    "scenarios": [
+      {
+        "name": "latest_submission_rejected_overrides_pending",
+        "input": { ... },
+        "expected": { "status": "rejected" }
+      }
+    ]
+  }
+  ```
+- The TypeScript unit tests in Vitest ingest these exact JSON files, ensuring zero divergence.
 
 ---
 
 ## 10. OWASP API Security Checklist
-1. **BOLA / IDOR (API1)**: Every group endpoint enforces active membership lookup `(group_id, caller_user_id)` before loading data.
+1. **BOLA / IDOR (API1)**: Every group endpoint enforces active membership lookup `(group_id, caller_user_id)` before loading data. Non-members receive 404 `group_not_found`.
 2. **Broken Authentication (API2)**: Firebase tokens verified on every request; no custom JWT signing logic; token claims never trusted for roles.
 3. **Broken Object Property Level Authorization (API3)**: Output DTOs filter out sensitive fields (unmasked references, other members' emails).
 4. **Unrestricted Resource Consumption (API4)**: Global rate limiting (100 req/min/IP), invitation brute-force lockout (5 fails / 5 min), body size limits (100kb max).
