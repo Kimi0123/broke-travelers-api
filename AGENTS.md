@@ -12,6 +12,7 @@ Backend REST API for Broke Travelers (Node.js, Express, TypeScript, PostgreSQL, 
 - Sibling Flutter repository (`../broke_travelers`) is strictly READ-ONLY. Never create, edit, delete, format, or commit files there.
 - npm install only for dependencies approved by the current task; always commit package-lock.json; no runtime dependency in src/domain.
 - Keep architecture simple: single service, single database. Do not introduce microservices, caching layers, or message queues unless documented and approved.
+- Run integration tests before touching ledger/idempotency code; never use TRUNCATE/DELETE outside test setup.
 
 ## Financial Rules (Critical & Non-Negotiable)
 

@@ -22,13 +22,15 @@ Ordered task breakdown for implementing the Broke Travelers backend API and comp
 
 ---
 
-### Task 5.2: Database Schema, Prisma Migrations & Concurrency Verification
+### Task 5.2: Database Schema, Prisma Migrations & Concurrency Verification — [DONE]
 - **Goal**: Provision PostgreSQL via Docker Compose, apply Prisma schema, configure immutability triggers, and verify posting concurrency.
+- **Status**: **DONE** (Backend commits `4bf4857`, `d76b81a`, `8753fbd`, `e737e64`, `333de1c`, `a2487dc`, `350dfb2` on branch `main`).
 - **Deliverables**: `docker-compose.yml`, `prisma/schema.prisma`, initial migration with append-only triggers (`ledger_entries`, `audit_log`) and partial unique indexes; transaction posting service with `FOR UPDATE` group locks; integration test suite.
 - **Requirements**:
   - `payment_submissions` table must include `seq BIGINT GENERATED ALWAYS AS IDENTITY` so submission insertion order is monotonic, reproducible, and provides deterministic tie-breaking for `deriveObligationStatus`.
-- **Acceptance Tests**: Migrations execute cleanly; 10 concurrent requests attempting to post against balance are serialized without overdraw; raw `UPDATE`/`DELETE` on ledger entries is rejected.
+- **Acceptance Tests**: Migrations execute cleanly; 10 concurrent requests attempting to post against balance are serialized without overdraw; raw `UPDATE`/`DELETE` on ledger entries is rejected; 23 integration tests pass across 9 test files.
 - **Flutter Impact**: None.
+- **Next Task**: Task 5.3 (Authentication, Session & Group Management Endpoints).
 
 ---
 

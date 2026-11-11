@@ -284,3 +284,29 @@ erDiagram
 - **Decision 1 (Resolved 2026-11)**: API is fully multi-group. The Flutter mobile app uses the first group until a multi-group switcher is built in Phase 6.
 - **Decision 2 (Resolved 2026-11)**: Rejoining a group creates a new `group_memberships` row. Historical contributions remain permanently linked to the previous membership ID.
 - **Decision 3 (Resolved 2026-11)**: 48-hour idempotency key retention window is adopted; natural schema uniqueness constraints provide permanent second-line deduplication.
+
+---
+
+## 10. Implementation Notes (Task 5.2)
+
+1. **Partial Unique Indexes**:
+   - `idx_group_memberships_active_user`: Enforces one active membership per user per group (`WHERE left_at IS NULL`). Permits rejoining after departure without colliding with historical records.
+   - `idx_payment_submissions_active_reference`: Enforces reference uniqueness across active submissions (`WHERE status IN ('pending', 'verified')`). Permits reference reuse if a previous submission was rejected.
+   - `idx_idempotency_group_scoped`: Uniqueness on `(group_id, operation, idempotency_key) WHERE group_id IS NOT NULL`.
+   - `idx_idempotency_user_scoped`: Uniqueness on `(actor_user_id, operation, idempotency_key) WHERE group_id IS NULL`.
+
+2. **Append-Only Triggers**:
+   - `prevent_modification_append_only()` PL/pgSQL function attached `BEFORE UPDATE OR DELETE` (row-level) and `BEFORE TRUNCATE` (statement-level) to `ledger_entries` and `audit_log`.
+   - Raises `append_only_violation` (`restrict_violation`) even when triggered by `migration_owner`, preventing accidental administrative deletion.
+
+3. **Activity Read Model View (`v_activity_items`)**:
+   - Computes a `UNION ALL` across immutable posted ledger entries (`status = 'verified'`) and open submissions (`status IN ('pending', 'rejected')`).
+   - Supports keyset pagination ordered deterministically by `occurred_at DESC, id DESC`.
+
+4. **Database Roles and Permissions**:
+   - `migration_owner`: Full DDL owner with `CREATEDB` for managing schema migrations, triggers, and shadow databases.
+   - `api_user`: Principle of least privilege runtime role used by application services. Has `SELECT`, `INSERT` on all tables, `UPDATE` on mutable tables (`groups`, `group_memberships`, `payment_submissions`, `approval_requests`, `invitations`), and explicitly revoked `UPDATE`, `DELETE`, and `TRUNCATE` on `ledger_entries` and `audit_log`.
+
+5. **Concurrency and Idempotency**:
+   - Mutual exclusion within groups enforced via row locking (`SELECT id FROM groups WHERE id = $1 FOR UPDATE`) under `READ COMMITTED` transaction isolation.
+   - Prevents retry storms and serialization conflicts (40001) while strictly eliminating race-condition overdraws (verified across concurrent test batteries).

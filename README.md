@@ -15,8 +15,25 @@ Broke Travelers is an immutable financial ledger and group transparency recordke
 The Flutter mobile application lives in the sibling directory (`../broke_travelers`). That repository serves as the executable specification of all business and financial logic through its mock repository suite. The Flutter repository is treated as strictly read-only by backend tooling.
 
 ## Current Status
-**Phase 5.1 complete — pure domain module ported and verified.**
-The dependency-free `src/domain/` module contains the 1:1 TypeScript port of all financial logic, ledger math, due dates, obligation status, approval quorum, and report builders. Parity is proven across 135 golden test vectors generated from the production Dart code. No HTTP or database layer yet (scheduled for Tasks 5.2+).
+**Phase 5.2 complete — database schema, immutability triggers, posting service, and concurrency verification.**
+PostgreSQL schema is implemented with Prisma migrations, raw-SQL append-only triggers on `ledger_entries` and `audit_log`, partial unique indexes, database roles (`migration_owner`, `api_user`), group row locking for mutual exclusion, FIN-1 verification atomicity, and idempotency protection. Verified across 190 unit/vector tests and 23 integration tests against PostgreSQL 17.
+
+## Local Database
+Docker Compose provisions a local PostgreSQL 17 container on port 5533:
+
+```bash
+# Start database container and await healthy status
+npm run db:up
+
+# Deploy migrations
+npm run db:migrate
+
+# Run database integration test suite
+npm run test:integration
+
+# Stop database container
+npm run db:down
+```
 
 ## Domain Module Layout (`src/domain/`)
 - `money.ts`: `Paisa` branded safe integer monetary arithmetic (no floating-point, integer paisa only)
