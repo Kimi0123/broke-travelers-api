@@ -26,6 +26,7 @@ model User {
   auditLogs           AuditLog[]
   idempotencyKeys     IdempotencyKey[]
   updateReads         UserUpdateRead[]
+  invitationAttempts  InvitationAttempt[]
 
   @@map("users")
 }
@@ -268,4 +269,16 @@ model UserUpdateRead {
 
   @@id([userId, groupId, feedItemId])
   @@map("user_update_reads")
+}
+
+model InvitationAttempt {
+  id          String   @id @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  attemptedAt DateTime @default(now()) @map("attempted_at") @db.Timestamptz
+  succeeded   Boolean  @map("succeeded")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, attemptedAt(sort: Desc)], map: "idx_invitation_attempts_user_window")
+  @@map("invitation_attempts")
 }

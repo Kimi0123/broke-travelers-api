@@ -44,6 +44,7 @@ export async function resetTestDatabase(): Promise<void> {
 
     TRUNCATE TABLE
       user_update_reads,
+      invitation_attempts,
       idempotency_keys,
       audit_log,
       bank_reconciliations,

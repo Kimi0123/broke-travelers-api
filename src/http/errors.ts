@@ -233,6 +233,7 @@ export class HttpError extends Error {
     readonly status: number,
     readonly code: string,
     message?: string,
+    readonly headers?: Record<string, string>,
   ) {
     super(message ?? ERROR_MESSAGES[code]?.message ?? 'An error occurred');
     this.name = 'HttpError';
@@ -340,6 +341,10 @@ export function createErrorHandler(logger?: {
     /* eslint-enable @typescript-eslint/no-unused-vars */
     const requestId = (req as { id?: string }).id ?? 'unknown';
     const resolved = resolveError(err);
+
+    if (err instanceof HttpError && err.headers) {
+      res.set(err.headers);
+    }
 
     if (resolved.status >= 500 && logger) {
       logger.error(
