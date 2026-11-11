@@ -1,0 +1,26 @@
+services:
+  db:
+    image: postgres:17
+    container_name: broke-travelers-db
+    restart: unless-stopped
+    ports:
+      - '${POSTGRES_PORT:-5433}:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_local_dev_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-broke_travelers}
+      MIGRATION_OWNER_PASSWORD: ${MIGRATION_OWNER_PASSWORD:-migration_owner_local_dev_secret}
+      API_USER_PASSWORD: ${API_USER_PASSWORD:-api_user_local_dev_secret}
+    volumes:
+      - broke_travelers_pgdata:/var/lib/postgresql/data
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d broke_travelers']
+      interval: 3s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
+
+volumes:
+  broke_travelers_pgdata:
+    name: broke_travelers_pgdata
