@@ -68,7 +68,7 @@ export async function checkIdempotency<T>(
     where: {
       idempotencyKey: params.idempotencyKey,
       operation: params.operation,
-      ...(params.groupId ? { groupId: params.groupId } : {}),
+      ...(params.groupId !== undefined ? { groupId: params.groupId } : {}),
       ...(params.actorUserId ? { actorUserId: params.actorUserId } : {}),
     },
   });
