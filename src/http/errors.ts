@@ -38,6 +38,10 @@ export const ERROR_MESSAGES: Readonly<
     status: 400,
     message: 'Malformed request syntax or validation failure',
   },
+  invalid_cursor: {
+    status: 400,
+    message: 'Pagination cursor is invalid or malformed',
+  },
   invalid_input: { status: 400, message: 'Invalid input' },
   payload_too_large: {
     status: 413,
@@ -142,6 +146,10 @@ export const ERROR_MESSAGES: Readonly<
   period_not_open: {
     status: 400,
     message: 'This period is not open for submission',
+  },
+  period_not_found: {
+    status: 404,
+    message: 'Contribution period not found',
   },
   already_submitted: {
     status: 409,

@@ -10,11 +10,14 @@ import type { AppConfig } from '../config/env.js';
 import { generateId } from '../infrastructure/db/ids.js';
 import { createErrorHandler } from './errors.js';
 import { requestIdMiddleware } from './middleware/request-id.js';
+import { createContributionsRouter } from './routes/contributions.js';
 import { createGroupsRouter } from './routes/groups.js';
 import { createInvitationsRouter } from './routes/invitations.js';
 import { createMembersRouter } from './routes/members.js';
+import { createPaymentsRouter } from './routes/payments.js';
 import { createProfileRouter } from './routes/profile.js';
 import { createSessionRouter } from './routes/session.js';
+import { createTransactionsRouter } from './routes/transactions.js';
 
 export interface AppDependencies {
   readonly prisma: PrismaClient;
@@ -137,6 +140,29 @@ export function createApp(deps: AppDependencies): Express {
     );
     app.use(
       createMembersRouter({
+        prisma: deps.prisma,
+        tokenVerifier: deps.tokenVerifier,
+        clock: deps.clock,
+        idGenerator: deps.idGenerator,
+      }),
+    );
+    app.use(
+      createContributionsRouter({
+        prisma: deps.prisma,
+        tokenVerifier: deps.tokenVerifier,
+        clock: deps.clock,
+      }),
+    );
+    app.use(
+      createPaymentsRouter({
+        prisma: deps.prisma,
+        tokenVerifier: deps.tokenVerifier,
+        clock: deps.clock,
+        idGenerator: deps.idGenerator,
+      }),
+    );
+    app.use(
+      createTransactionsRouter({
         prisma: deps.prisma,
         tokenVerifier: deps.tokenVerifier,
         clock: deps.clock,

@@ -77,3 +77,18 @@ export function requireOwner(
   }
   next();
 }
+
+/**
+ * Enforces that the caller has treasurer privileges in the current group context.
+ * Assumes loadMembership has already executed.
+ */
+export function requireTreasurer(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): void {
+  if (!req.membership?.isTreasurer) {
+    throw new HttpError(403, 'forbidden');
+  }
+  next();
+}
