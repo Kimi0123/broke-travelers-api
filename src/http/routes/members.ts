@@ -45,6 +45,34 @@ export function createMembersRouter(deps: MembersRouteDeps): Router {
     },
   );
 
+  // GET /v1/groups/:groupId/members/:memberId
+  router.get(
+    '/v1/groups/:groupId/members/:memberId',
+    requireAuth(deps.tokenVerifier),
+    requireUser(deps.prisma),
+    loadMembership(deps.prisma),
+    async (req, res) => {
+      const user = req.user;
+      const rawGroupId = req.params['groupId'];
+      const groupId = Array.isArray(rawGroupId) ? rawGroupId[0] : rawGroupId;
+      const rawMemberId = req.params['memberId'];
+      const memberId = Array.isArray(rawMemberId)
+        ? rawMemberId[0]
+        : rawMemberId;
+
+      if (!user || !groupId || !memberId) {
+        throw new HttpError(404, 'group_not_found');
+      }
+
+      const detail = await membersService.getMemberDetail(
+        groupId,
+        memberId,
+        user.id,
+      );
+      res.status(200).json(detail);
+    },
+  );
+
   // PATCH /v1/groups/:groupId/members/:memberId/role
   router.patch(
     '/v1/groups/:groupId/members/:memberId/role',

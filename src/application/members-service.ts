@@ -1,15 +1,27 @@
 import type { PrismaClient } from '@prisma/client';
 import type { PaymentStatus } from '../domain/enums.js';
-import { monthStart } from '../domain/month-math.js';
+import { monthStart, nextMonthStart } from '../domain/month-math.js';
 import { deriveObligationStatus } from '../domain/obligation-status.js';
+import { effectivePeriodMonth } from '../domain/types.js';
+import {
+  compareWallClock,
+  isAfter,
+  isBefore,
+  type WallClock,
+} from '../domain/wall-clock.js';
 import { HttpError } from '../http/errors.js';
 import { withTransaction } from '../infrastructure/db/client.js';
 import { generateId } from '../infrastructure/db/ids.js';
 import {
+  mapLedgerEntryRow,
   mapSubmissionToLedgerEntry,
   sortBySeqAsc,
+  type MappedLedgerEntry,
 } from '../infrastructure/db/mappers.js';
-import { utcInstantToNptWallClock } from '../infrastructure/time/npt.js';
+import {
+  nptWallClockToUtcInstant,
+  utcInstantToNptWallClock,
+} from '../infrastructure/time/npt.js';
 
 export interface GroupMemberResponse {
   readonly id: string;
@@ -18,6 +30,22 @@ export interface GroupMemberResponse {
   readonly joinedAt: string;
   readonly isCurrentUser: boolean;
   readonly currentPeriodStatus: PaymentStatus;
+}
+
+export interface MemberContributionHistoryDto {
+  readonly month: string;
+  readonly expectedPaisa: number;
+  readonly paidPaisa: number;
+  readonly status: PaymentStatus;
+  readonly recordedAt: string | null;
+}
+
+export interface MemberDetailResponseDto {
+  readonly member: GroupMemberResponse;
+  readonly verifiedTotalPaisa: number;
+  readonly pendingTotalPaisa: number;
+  readonly verifiedMonthCount: number;
+  readonly history: MemberContributionHistoryDto[];
 }
 
 export interface UpdateMemberRoleInput {
@@ -47,6 +75,23 @@ export class MembersService {
     this.prisma = deps.prisma;
     this.clock = deps.clock;
     this.idGenerator = deps.idGenerator;
+  }
+
+  private async loadAllEntries(groupId: string): Promise<MappedLedgerEntry[]> {
+    const [ledgerRows, submissionRows] = await Promise.all([
+      this.prisma.ledgerEntry.findMany({
+        where: { groupId },
+        orderBy: { seq: 'asc' },
+      }),
+      this.prisma.paymentSubmission.findMany({
+        where: { groupId, postedLedgerEntryId: null },
+        orderBy: { seq: 'asc' },
+      }),
+    ]);
+
+    const mappedLedger = ledgerRows.map(mapLedgerEntryRow);
+    const mappedSubmissions = submissionRows.map(mapSubmissionToLedgerEntry);
+    return sortBySeqAsc([...mappedLedger, ...mappedSubmissions]);
   }
 
   async listMembers(
@@ -80,13 +125,7 @@ export class MembersService {
     const nptNow = utcInstantToNptWallClock(now);
     const currentPeriodStart = monthStart(nptNow);
 
-    const rawSubmissions = await this.prisma.paymentSubmission.findMany({
-      where: { groupId },
-      orderBy: { seq: 'asc' },
-    });
-    const entries = sortBySeqAsc(
-      rawSubmissions.map(mapSubmissionToLedgerEntry),
-    );
+    const entries = await this.loadAllEntries(groupId);
 
     return activeMemberships.map((m) => {
       const roles = computeRoles(m.isOwner, m.isTreasurer);
@@ -106,6 +145,172 @@ export class MembersService {
         currentPeriodStatus: status,
       };
     });
+  }
+
+  async getMemberDetail(
+    groupId: string,
+    memberId: string,
+    viewerUserId: string,
+  ): Promise<MemberDetailResponseDto> {
+    const viewerMembership = await this.prisma.groupMembership.findFirst({
+      where: {
+        groupId,
+        userId: viewerUserId,
+        leftAt: null,
+      },
+    });
+
+    if (!viewerMembership) {
+      throw new HttpError(404, 'group_not_found');
+    }
+
+    const group = await this.prisma.group.findUnique({
+      where: { id: groupId },
+    });
+    if (!group) {
+      throw new HttpError(404, 'group_not_found');
+    }
+
+    const target = await this.prisma.groupMembership.findFirst({
+      where: {
+        id: memberId,
+        groupId,
+        leftAt: null,
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    if (!target) {
+      throw new HttpError(404, 'member_not_found');
+    }
+
+    const allEntries = await this.loadAllEntries(groupId);
+
+    const now = this.clock ? this.clock() : new Date();
+    const nowWallClock = utcInstantToNptWallClock(now);
+    const anchorPeriodStart = monthStart(nowWallClock);
+
+    const currentPeriodStatus = deriveObligationStatus({
+      entries: allEntries,
+      memberId: target.id,
+      periodStart: anchorPeriodStart,
+      anchorPeriodStart,
+    });
+
+    // Determine earliest calendar month
+    let earliest = monthStart(utcInstantToNptWallClock(group.createdAt));
+    if (isBefore(anchorPeriodStart, earliest)) {
+      earliest = anchorPeriodStart;
+    }
+    for (const entry of allEntries) {
+      const entryMonth =
+        entry.kind === 'contribution'
+          ? effectivePeriodMonth(entry)
+          : monthStart(entry.occurredAt);
+      if (isBefore(entryMonth, earliest)) {
+        earliest = entryMonth;
+      }
+    }
+
+    // Build calendar months from earliest through anchorPeriodStart
+    const months: WallClock[] = [];
+    let cursor = earliest;
+    while (!isAfter(cursor, anchorPeriodStart)) {
+      months.push(cursor);
+      cursor = nextMonthStart(cursor);
+    }
+
+    // Member contributions from all entries
+    const memberContributions = allEntries.filter(
+      (e) => e.memberId === target.id && e.kind === 'contribution',
+    );
+
+    const isSelf = target.userId === viewerUserId;
+    const isViewerTreasurer = viewerMembership.isTreasurer;
+    const canSeePending = isSelf || isViewerTreasurer;
+
+    const expectedPaisa = Number(group.expectedPaisa);
+
+    // Build history newest month first
+    const history: MemberContributionHistoryDto[] = [];
+    for (let i = months.length - 1; i >= 0; i--) {
+      const month = months[i]!;
+      const periodEnd = nextMonthStart(month);
+
+      const monthEntries = memberContributions.filter((e) => {
+        const eMonth = effectivePeriodMonth(e);
+        return !isBefore(eMonth, month) && isBefore(eMonth, periodEnd);
+      });
+      monthEntries.sort((a, b) => compareWallClock(b.occurredAt, a.occurredAt));
+
+      const status = deriveObligationStatus({
+        entries: allEntries,
+        memberId: target.id,
+        periodStart: month,
+        anchorPeriodStart,
+      });
+
+      let paidPaisa = 0;
+      let recordedAt: string | null = null;
+
+      if (monthEntries.length > 0) {
+        const latest = monthEntries[0]!;
+        const isPaidStatus =
+          status === 'verified' || status === 'pendingVerification';
+        if (isPaidStatus) {
+          if (status === 'pendingVerification') {
+            paidPaisa = canSeePending ? latest.magnitudePaisa : 0;
+          } else {
+            paidPaisa = latest.magnitudePaisa;
+          }
+        }
+        recordedAt = nptWallClockToUtcInstant(latest.occurredAt).toISOString();
+      }
+
+      history.push({
+        month: nptWallClockToUtcInstant(month).toISOString(),
+        expectedPaisa,
+        paidPaisa,
+        status,
+        recordedAt,
+      });
+    }
+
+    // Cumulative totals
+    let verifiedTotalPaisa = 0;
+    let pendingTotalPaisa = 0;
+    for (const e of memberContributions) {
+      if (e.status === 'verified') {
+        verifiedTotalPaisa += e.magnitudePaisa;
+      } else if (e.status === 'pendingVerification') {
+        pendingTotalPaisa += e.magnitudePaisa;
+      }
+    }
+
+    if (!canSeePending) {
+      pendingTotalPaisa = 0;
+    }
+
+    const verifiedMonthCount = history.filter(
+      (r) => r.status === 'verified',
+    ).length;
+
+    return {
+      member: {
+        id: target.id,
+        displayName: target.user.displayName,
+        roles: computeRoles(target.isOwner, target.isTreasurer),
+        joinedAt: target.joinedAt.toISOString(),
+        isCurrentUser: target.userId === viewerUserId,
+        currentPeriodStatus,
+      },
+      verifiedTotalPaisa,
+      pendingTotalPaisa,
+      verifiedMonthCount,
+      history,
+    };
   }
 
   async updateMemberRole(
@@ -189,13 +394,20 @@ export class MembersService {
       const nptNow = utcInstantToNptWallClock(now);
       const currentPeriodStart = monthStart(nptNow);
 
-      const rawSubmissions = await tx.paymentSubmission.findMany({
-        where: { groupId },
-        orderBy: { seq: 'asc' },
-      });
-      const entries = sortBySeqAsc(
-        rawSubmissions.map(mapSubmissionToLedgerEntry),
-      );
+      const [ledgerRows, submissionRows] = await Promise.all([
+        tx.ledgerEntry.findMany({
+          where: { groupId },
+          orderBy: { seq: 'asc' },
+        }),
+        tx.paymentSubmission.findMany({
+          where: { groupId, postedLedgerEntryId: null },
+          orderBy: { seq: 'asc' },
+        }),
+      ]);
+      const entries = sortBySeqAsc([
+        ...ledgerRows.map(mapLedgerEntryRow),
+        ...submissionRows.map(mapSubmissionToLedgerEntry),
+      ]);
       const status = deriveObligationStatus({
         entries,
         memberId: updated.id,
@@ -252,7 +464,7 @@ export class MembersService {
       throw new HttpError(409, 'cannot_remove_owner');
     }
 
-    // Invariant 2: Pending payments
+    // Invariant 2: Cannot remove member with pending payments
     const pendingCount = await this.prisma.paymentSubmission.count({
       where: {
         groupId,
@@ -265,7 +477,7 @@ export class MembersService {
       throw new HttpError(409, 'member_has_pending_payments');
     }
 
-    // Invariant 3: Last treasurer
+    // Invariant 3: Cannot remove last treasurer
     if (target.isTreasurer) {
       const otherTreasurersCount = await this.prisma.groupMembership.count({
         where: {
@@ -281,8 +493,10 @@ export class MembersService {
       }
     }
 
+    // Soft remove: set leftAt to now and append audit log
     await withTransaction(this.prisma, async (tx) => {
       const now = this.clock ? this.clock() : new Date();
+
       await tx.groupMembership.update({
         where: { id: memberId },
         data: { leftAt: now },
@@ -295,9 +509,9 @@ export class MembersService {
           groupId,
           actorUserId,
           action: 'member_removed',
-          field: 'membership',
-          beforeValue: 'active',
-          afterValue: 'left',
+          field: `member:${memberId}:left_at`,
+          beforeValue: null,
+          afterValue: now.toISOString(),
           createdAt: now,
         },
       });
