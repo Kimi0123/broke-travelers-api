@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { pino } from 'pino';
 import type { TokenVerifier } from './application/ports/token-verifier.js';
 import { loadConfig } from './config/env.js';
