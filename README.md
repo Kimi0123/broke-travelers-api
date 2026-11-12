@@ -6,76 +6,61 @@ Broke Travelers is an immutable financial ledger and group transparency recordke
 
 ## Tech Stack
 - **Runtime & Language**: Node.js (v22+) with TypeScript (strict mode)
-- **Framework**: Express.js (Phase 5.3+)
-- **Database & ORM**: PostgreSQL with Prisma ORM (Phase 5.2+)
-- **Authentication**: Firebase Authentication (Phase 5.3+)
-- **Testing**: Vitest with 1:1 golden vectors ported from Dart
-
-## Relation to Flutter Client
-The Flutter mobile application lives in the sibling directory (`../broke_travelers`). That repository serves as the executable specification of all business and financial logic through its mock repository suite. The Flutter repository is treated as strictly read-only by backend tooling.
+- **Framework**: Express.js 5 with Helmet & Pino
+- **Database & ORM**: PostgreSQL 17 with Prisma ORM
+- **Authentication**: Firebase Authentication
+- **Testing**: Vitest with golden vectors ported from Dart, supertest integration suite
 
 ## Current Status
-**Phase 5.2 complete — database schema, immutability triggers, posting service, and concurrency verification.**
-PostgreSQL schema is implemented with Prisma migrations, raw-SQL append-only triggers on `ledger_entries` and `audit_log`, partial unique indexes, database roles (`migration_owner`, `api_user`), group row locking for mutual exclusion, FIN-1 verification atomicity, and idempotency protection. Verified across 190 unit/vector tests and 23 integration tests against PostgreSQL 17.
+**Phase 5.3 complete — HTTP Layer: Authentication, Session, Groups, Invitations, Members.**
+Express 5 REST API with Firebase ID token authentication (TokenVerifier port with Firebase adapter), user provisioning, groups CRUD, single-use invitations with brute-force lockout, member role management, and soft removal invariants. Verified across 218 unit/vector tests and 41 integration tests against real PostgreSQL.
 
-## Local Database
-Docker Compose provisions a local PostgreSQL 17 container on port 5533:
+## Run the API Locally
 
-```bash
-# Start database container and await healthy status
-npm run db:up
+1. **Environment Setup**:
+   ```bash
+   cp .env.example .env
+   # Edit .env: set FIREBASE_PROJECT_ID and FIREBASE_SERVICE_ACCOUNT_JSON (Roadmap 5.0c)
+   ```
 
-# Deploy migrations
-npm run db:migrate
+2. **Start Database & Deploy Migrations**:
+   ```bash
+   npm run db:up       # Starts PostgreSQL on port 5533
+   npm run db:migrate  # Applies Prisma migrations and triggers
+   ```
 
-# Run database integration test suite
-npm run test:integration
+3. **Start Development Server**:
+   ```bash
+   npm run dev         # Starts server on http://localhost:3000
+   ```
 
-# Stop database container
-npm run db:down
-```
+4. **Example Requests**:
+   ```bash
+   # Health check (unauthenticated)
+   curl http://localhost:3000/v1/health
 
-## Domain Module Layout (`src/domain/`)
-- `money.ts`: `Paisa` branded safe integer monetary arithmetic (no floating-point, integer paisa only)
-- `wall-clock.ts`: Pure civil calendar representation and Hinnant arithmetic (no `Date` or system clock)
-- `month-math.ts`: Civil month start and next month calculations
-- `enums.ts`: Domain enums (`ActivityKind`, `PaymentStatus`, `PaymentMethod`, `GroupRole`, `ApprovalStatus`)
-- `errors.ts`: Typed `DomainError` and functional `Result` monad
-- `types.ts`: Core domain interfaces (`LedgerEntry`, `GroupMember`)
-- `ledger-math.ts`: `signedPaisa` and `verifiedBalancePaisa` calculations
-- `due-dates.ts`: `dueDateFor` calendar due date derivation and clamping
-- `obligation-status.ts`: `deriveObligationStatus` contribution state machine
-- `approval-rules.ts`: Quorum thresholds, early rejection, expiry, and status resolution
-- `transaction-validators.ts`: Direct transaction and reversal reason validators
-- `payment-reference.ts`: Payment reference normalization (`normalizePaymentReference`)
-- `payment-validators.ts`: Reference and note validators, duplicate detection
-- `reference-masking.ts`: Privacy reference masking (`maskPaymentReference`)
-- `report-types.ts` & `report-builders.ts`: Monthly, member, annual, and outflow financial reports
+   # User session provisioning (requires Firebase ID token)
+   curl -X POST http://localhost:3000/v1/session \
+     -H "Authorization: Bearer <FIREBASE_ID_TOKEN>" \
+     -H "Content-Type: application/json" \
+     -d '{"displayName": "Nirvan"}'
+   ```
+   *(Note: The `fake:<uid>:<email>` token syntax is accepted strictly by the in-memory test double `FakeTokenVerifier` inside test suites. Live dev/prod instances require real Firebase ID tokens from the project configured in roadmap 5.0c).*
 
-## Development
-Requirements: Node.js >= 22.0.0 and npm >= 10.0.0.
+## Testing & Quality
 
 ```bash
-# Install dependencies
-npm ci
-
-# Run unit and golden vector tests
-npm test
-
-# Lint and typecheck
-npm run lint
-npm run typecheck
-
-# Format check
-npm run format:check
-
-# Build TypeScript to dist/
-npm run build
+npm run test:unit         # Unit & 135 Dart golden vector tests (218 tests)
+npm run test:integration  # Real PostgreSQL integration tests (41 tests across 14 suites)
+npm run lint              # ESLint check
+npm run format:check      # Prettier format check
+npm run typecheck         # TypeScript compiler check
+npm run build             # Build TypeScript output to dist/
 ```
 
 ## Documentation Index
 - [`docs/domain-rules.md`](docs/domain-rules.md): Authoritative business rules extracted from Flutter client.
 - [`docs/schema.md`](docs/schema.md): Relational PostgreSQL schema, immutability triggers, and concurrency.
-- [`docs/api-contract.md`](docs/api-contract.md): Versioned REST API specification (`/v1`) and envelopes.
+- [`docs/api-contract.md`](docs/api-contract.md): Versioned REST API specification (`/v1`) and error envelopes.
 - [`docs/decisions.md`](docs/decisions.md): Architecture recommendations, domain conventions, and security.
 - [`docs/roadmap.md`](docs/roadmap.md): Phased execution roadmap for Phase 5 tasks.

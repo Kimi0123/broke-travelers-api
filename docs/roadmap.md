@@ -30,15 +30,23 @@ Ordered task breakdown for implementing the Broke Travelers backend API and comp
   - `payment_submissions` table must include `seq BIGINT GENERATED ALWAYS AS IDENTITY` so submission insertion order is monotonic, reproducible, and provides deterministic tie-breaking for `deriveObligationStatus`.
 - **Acceptance Tests**: Migrations execute cleanly; 10 concurrent requests attempting to post against balance are serialized without overdraw; raw `UPDATE`/`DELETE` on ledger entries is rejected; 23 integration tests pass across 9 test files.
 - **Flutter Impact**: None.
-- **Next Task**: Task 5.3 (Authentication, Session & Group Management Endpoints).
 
 ---
 
-### Task 5.3: Authentication, Session & Group Management Endpoints
-- **Goal**: Implement Firebase ID token authentication middleware, user profile resolution, group CRUD, invitations, and member role management.
-- **Deliverables**: Auth middleware (Firebase Admin SDK + local emulator support), controllers for `POST /v1/session`, `/v1/profile`, `/v1/groups`, `/v1/invitations`, `/v1/groups/:id/members`; brute-force rate limiter; audit logger integration.
-- **Acceptance Tests**: Authenticated routes reject invalid tokens; invitation single-use, 7-day expiry, and 5-attempt lockout verified; member removal invariant rules enforced.
-- **Flutter Impact**: None.
+### Task 5.3: Authentication, Session & Group Management Endpoints — [DONE]
+- **Goal**: Implement Express REST API with Firebase ID token authentication (TokenVerifier port with fake verifier double), user session provisioning, group CRUD, invitations with brute-force lockout, and member role management.
+- **Status**: **DONE** (Backend commits `3e149a5`, `74f35b3`, `19c5879`, `43103e7`, `081e350`, `e1a048d`, `9a2e6c9`, `ae79144` on branch `main`).
+- **Deliverables**:
+  - Express 5 REST API skeleton with Helmet, Pino structured logging, standard error envelopes, and `/v1/health`.
+  - TokenVerifier port with `FirebaseTokenVerifier` adapter and `FakeTokenVerifier` test double.
+  - Endpoints: `POST /v1/session`, `GET /v1/profile`, `POST /v1/groups`, `GET /v1/groups/:id`, `PATCH /v1/groups/:id/settings`, `POST /v1/groups/:id/invitations`, `GET /v1/groups/:id/invitations`, `DELETE /v1/groups/:id/invitations/:invitationId`, `POST /v1/invitations/accept`, `GET /v1/groups/:id/members`, `PATCH /v1/groups/:id/members/:memberId/role`, `DELETE /v1/groups/:id/members/:memberId`.
+  - `invitation_attempts` table with brute-force lockout (5 attempts in 15m -> 429 `too_many_attempts` with `Retry-After`).
+  - Row locking (`FOR UPDATE`) on invitation acceptance to prevent race conditions on concurrent redemptions.
+  - Full HTTP integration test suite running against real PostgreSQL test database.
+- **Moved to Task 5.4**: Member detail endpoint (`GET /v1/groups/:groupId/members/:memberId`) moved to Task 5.4 alongside contribution history and obligation ledger queries.
+- **Acceptance Tests**: Authenticated routes reject invalid tokens; user-scoped and group-scoped idempotency replay and conflict verification; invitation single-use, 7-day expiry, and 5-attempt lockout verified; member removal invariant rules enforced in strict order; 41 integration tests pass across 14 test files.
+- **Flutter Impact**: None (backend standalone).
+- **Next Task**: Task 5.4 (Financial Operations: Contributions, Payments & Ledger Endpoints).
 
 ---
 

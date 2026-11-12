@@ -81,6 +81,11 @@ jobs:
 
       - name: Run integration tests
         env:
+          NODE_ENV: test
+          PORT: 3000
+          LOG_LEVEL: silent
+          REQUIRE_VERIFIED_EMAIL: 'false'
+          FIREBASE_PROJECT_ID: broke-travelers-test
           DATABASE_URL: postgresql://api_user:api_user_local_dev_secret@localhost:5432/broke_travelers_test?schema=public
           TEST_DATABASE_URL: postgresql://api_user:api_user_local_dev_secret@localhost:5432/broke_travelers_test?schema=public
           TEST_DIRECT_URL: postgresql://migration_owner:migration_owner_local_dev_secret@localhost:5432/broke_travelers_test?schema=public

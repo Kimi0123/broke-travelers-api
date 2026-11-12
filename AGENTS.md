@@ -34,6 +34,7 @@ Backend REST API for Broke Travelers (Node.js, Express, TypeScript, PostgreSQL, 
 - Idempotency: every money-writing endpoint (`POST /v1/groups/:id/...`) requires an `Idempotency-Key` header to protect against double-submission and network retry races.
 - Privacy & leak prevention: errors must return safe, generic error envelopes. Never expose stack traces, database internals, credentials, or other members' payment references in logs or responses.
 - References: payment references are normalized for uniqueness and masked (`Ref ••••3456`) to non-privileged viewers. Never expose references in public feeds.
+- Never log request bodies, tokens or payment references; test code must not be imported by src/.
 - Secrets hygiene: never commit `.env` or Firebase service account keys. Commit only `.env.example`.
 
 ## TypeScript & Code Quality

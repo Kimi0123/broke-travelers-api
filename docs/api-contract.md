@@ -39,10 +39,11 @@ Versioned HTTP REST API specification for Broke Travelers backend API.
   `{ "error": { "code": "too_many_attempts", "message": "Too many requests. Please try again later.", "requestId": "..." } }`
 
 ### 1.5 Idempotency
-- **Header**: `Idempotency-Key: <client-uuidv4>` required on all money-writing POST endpoints. Clients generate a UUIDv4 per form instance and reuse it on retry.
+- **Header**: `Idempotency-Key: <string>` required on all money-writing POST endpoints, `POST /v1/groups`, and `POST /v1/invitations/accept`. Clients generate a unique string (1 to 100 characters, e.g. UUIDv4) per form instance and reuse it on retry.
+- **Validation**: If the `Idempotency-Key` header is missing, the API returns 400 `idempotency_key_required`. If empty or > 100 characters, returns 400 `invalid_idempotency_key`.
 - **Scopes**:
-  - Group-scoped (`(group_id, user_id, operation, key)`): payments, transactions, approvals, reconciliations.
-  - User-scoped (`(user_id, operation, key)` where `group_id IS NULL`): `POST /v1/groups` and `POST /v1/invitations/accept`.
+  - Group-scoped (`(group_id, operation, key)`): payments, transactions, approvals, reconciliations.
+  - User-scoped (`(actor_user_id, operation, key)` where `group_id IS NULL`): `POST /v1/groups` and `POST /v1/invitations/accept`.
 - **Replay & Conflict**: Replaying with identical body returns cached response with `Idempotent-Replay: true`. Mismatched body returns 409 `idempotency_conflict`.
 
 ### 1.6 Cold-Start & Health Handling
@@ -58,56 +59,89 @@ Versioned HTTP REST API specification for Broke Travelers backend API.
 #### `POST /v1/session`
 - **Replaces**: `AuthRepository.restoreSession`, `refreshCurrentUser`
 - **Auth**: Firebase Bearer Token | **Idempotent**: Yes
+- **Errors**: 401 `unauthorized` (missing/invalid token), 401 `invalid_token_claims` (token missing email)
 - **Request**: `{ "displayName": "Nirvan" }`
 - **Response 200**: `{ "user": { "id": "uuid", "name": "Nirvan", "email": "..." }, "groups": [...] }`
 
 #### `GET /v1/profile`
 - **Replaces**: `ProfileRepository.getProfile`
-- **Auth**: Active Member | **Derivation**: Read-only
-- **Response 200**: User profile, active roles, and group metadata.
+- **Auth**: Authenticated User (`user_not_provisioned` if session not initialized) | **Derivation**: Read-only
+- **Response 200**: User profile, active roles, and group memberships.
 
 #### `POST /v1/groups`
 - **Replaces**: `GroupsRepository.createGroup`
-- **Auth**: Authenticated User | **Idempotent**: User-scoped (`Idempotency-Key`)
+- **Auth**: Authenticated User | **Idempotent**: User-scoped (`Idempotency-Key` required)
 - **Request**: `{ "name": "Himalayan Crew", "monthlyContributionPaisa": 70000, "dueDay": 5 }`
 - **Response 201**: Group object. Creator is granted Owner & Treasurer.
+- **Audit**: Writes audit log for group creation.
 
 #### `GET /v1/groups/:groupId`
 - **Replaces**: `GroupsRepository.getGroup`
-- **Auth**: Active Member (non-members get 404) | **Derivation**: Read-only
-- **Response 200**: Group details, contribution amount, member count.
+- **Auth**: Active Member | **Derivation**: Read-only
+- **Errors**: Non-members, unknown IDs, and invalid UUIDs return uniform 404 `group_not_found` to prevent enumeration.
+- **Response 200**: Group details, contribution amount, member count, and caller's active role.
 
 #### `PATCH /v1/groups/:groupId/settings`
 - **Replaces**: `GroupsRepository.updateGroupSettings`
-- **Auth**: Group Owner
+- **Auth**: Group Owner | Non-owner members get 403 `forbidden`.
 - **Request**: `{ "name": "New Name", "dueDay": 10 }`
-- **Response 200**: Updated Group object. (Monthly contribution is immutable).
+- **Errors**: 400 `invalid_group_settings` (validation error or attempting to modify immutable `monthlyContributionPaisa`).
+- **Response 200**: Updated Group object. Writes audit log row for each modified setting.
+
+#### `POST /v1/groups/:groupId/invitations`
+- **Replaces**: `InvitationsRepository.createInvitation`
+- **Auth**: Group Owner
+- **Response 201**: `{ "invitation": { "id": "uuid", "groupId": "uuid", "code": "HIMA2345", "status": "pending", "expiresAt": "...", ... } }`
+- **Lifecycle**: Issues 8-character single-use code expiring in 7 days.
+
+#### `GET /v1/groups/:groupId/invitations`
+- **Replaces**: `InvitationsRepository.getInvitations`
+- **Auth**: Group Owner
+- **Response 200**: `{ "invitations": [...] }`. Dynamic status evaluation (`pending`, `accepted`, `revoked`, `expired`).
+
+#### `DELETE /v1/groups/:groupId/invitations/:invitationId`
+- **Replaces**: `InvitationsRepository.revokeInvitation`
+- **Auth**: Group Owner
+- **Errors**: 400 `invitation_not_revocable` (if invitation is already accepted, expired, or revoked).
+- **Response 200**: Updated invitation object with `status: "revoked"`.
 
 #### `POST /v1/invitations/accept`
 - **Replaces**: `InvitationsRepository.acceptInvitation`
-- **Auth**: Authenticated User | **Idempotent**: User-scoped (`Idempotency-Key`)
+- **Auth**: Authenticated User | **Idempotent**: User-scoped (`Idempotency-Key` required)
 - **Request**: `{ "code": "HIMA2345" }`
-- **Response 200**: Joined Group object. Creates new membership row.
-
-#### `GET /v1/groups/:groupId/invitations` & `POST /v1/groups/:groupId/invitations`
-- **Replaces**: `InvitationsRepository.getInvitations`, `createInvitation`
-- **Auth**: Group Owner. Issues 8-character single-use invitation code expiring in 7 days.
+- **Rate Limit & Lockout**: 5 failed attempts within 15 minutes triggers 429 `too_many_attempts` with `Retry-After`. Successful accept clears window.
+- **Multi-Group & Rejoining Semantics**: If user is already an active member of this group, returns 409 `already_in_group`. If user was previously removed (`left_at IS NOT NULL`), creates a new active membership row while preserving historical links.
+- **Errors**: Unknown, expired, or revoked codes return uniform 400 `invalid_invitation_code`.
+- **Response 200**: `{ "group": { ... }, "membership": { ... } }`.
 
 ---
 
 ### 2.2 Members & Roles
-#### `GET /v1/groups/:groupId/members` & `GET /v1/groups/:groupId/members/:memberId`
-- **Replaces**: `MembersRepository.getMembers`, `getMemberDetail`
+#### `GET /v1/groups/:groupId/members`
+- **Replaces**: `MembersRepository.getMembers`
 - **Auth**: Active Member | **Derivation**: Read-only
-- **Response 200**: Active members, roles, current obligation status, and contribution history.
+- **Errors**: Non-members and unknown groups return uniform 404 `group_not_found`.
+- **Ordering & Privacy**: Active members (`left_at IS NULL`) ordered by `joined_at ASC, id ASC`. Internal auth identifiers (`firebaseUid`) and other members' email addresses are strictly omitted.
+- **Obligation**: Dynamically derives `currentPeriodStatus` via `deriveObligationStatus`.
+- **Response 200**: `{ "members": [ ... ] }`.
+- *(Note: Member detail `GET /v1/groups/:groupId/members/:memberId` moved to Task 5.4 alongside contribution history).*
 
 #### `PATCH /v1/groups/:groupId/members/:memberId/role`
 - **Replaces**: `MembersRepository.setTreasurerRole`
-- **Auth**: Group Owner | **Request**: `{ "isTreasurer": true }`
+- **Auth**: Group Owner
+- **Request**: `{ "isTreasurer": true }`
+- **Errors**: 404 `member_not_found` (if member not active or not in group), 409 `cannot_demote_last_treasurer` (cannot remove treasurer status if user is the only treasurer).
+- **Response 200**: Updated member object. Writes audit log row.
 
 #### `DELETE /v1/groups/:groupId/members/:memberId`
 - **Replaces**: `MembersRepository.removeMember`
-- **Auth**: Group Owner | **Response 204**: Soft removal (`left_at = NOW()`).
+- **Auth**: Group Owner
+- **Errors & Invariant Precedence**:
+  1. Target is group owner -> 409 `cannot_remove_owner`
+  2. Target has pending payment submissions -> 409 `member_has_pending_payments`
+  3. Target is the last treasurer -> 409 `cannot_remove_last_treasurer`
+  4. Target not in group or already left -> 404 `member_not_found`
+- **Response 204**: Soft removal (`left_at = NOW()`). Member immediately loses access (future group calls return 404 `group_not_found`). Writes audit log row.
 
 ---
 
@@ -248,20 +282,28 @@ Versioned HTTP REST API specification for Broke Travelers backend API.
 | Error Code | HTTP | Flutter Source Location | Fixed User-Facing Message |
 |---|---|---|---|
 | `group_not_found` | 404 | `lib/core/error/group_access_exception.dart` | Group not found or access denied |
+| `member_not_found` | 404 | `lib/features/group/presentation/screens/group_members_screen.dart` | Member not found |
 | `forbidden` | 403 | `lib/core/error/permission_denied_exception.dart` | You do not have permission to perform this action |
+| `user_not_provisioned` | 401 | `lib/core/error/auth_exceptions.dart` | User record not provisioned; session creation required |
+| `invalid_token_claims` | 401 | `lib/core/error/auth_exceptions.dart` | Token missing required claims (email) |
+| `idempotency_key_required` | 400 | Backend middleware | Idempotency-Key header is required for this operation |
+| `invalid_idempotency_key` | 400 | Backend middleware | Idempotency-Key must be 1 to 100 characters |
+| `idempotency_conflict` | 409 | `lib/core/error/ledger_posting_exception.dart` | Conflicting request payload for this idempotency key |
+| `invitation_not_revocable` | 400 | `lib/features/group/presentation/screens/group_settings_screen.dart` | Cannot revoke an invitation that is already accepted, expired, or revoked |
 | `email_not_verified` | 403 | *New backend requirement* | Please verify your email address before joining or creating a group |
 | `group_creation_failed`| 409 | `lib/core/error/group_creation_exception.dart` | Unable to create group for this user |
 | `invalid_group_settings`| 400 | `lib/core/error/group_validation_exception.dart` | Group name or due day failed validation |
 | `cannot_remove_owner` | 409 | `lib/core/error/member_removal_blocked_exception.dart`| The group owner cannot be removed |
 | `member_has_pending_payments`| 409 | `lib/core/error/member_removal_blocked_exception.dart`| Cannot remove member with pending payments |
 | `cannot_remove_last_treasurer`| 409 | `lib/core/error/member_removal_blocked_exception.dart`| Cannot remove the group's only treasurer |
+| `cannot_demote_last_treasurer`| 409 | `lib/features/group/presentation/screens/group_members_screen.dart`| Cannot remove the group's only treasurer |
 | `insufficient_balance` | 409 | `lib/core/error/ledger_posting_exception.dart` | Insufficient verified balance to record transaction |
 | `report_range_invalid` | 400 | `lib/core/error/report_range_exception.dart` | Requested report period is outside the group's history |
 | `invalid_credentials` | 401 | `lib/features/authentication/presentation/auth_error_messages.dart` | Invalid email or password |
 | `email_already_in_use` | 409 | `lib/features/authentication/presentation/auth_error_messages.dart` | An account already exists with this email |
 | `weak_password` | 400 | `lib/features/authentication/presentation/auth_error_messages.dart` | Password must be at least 8 characters |
 | `invalid_invitation_code`| 400 | `lib/features/group/presentation/screens/join_group_screen.dart` | Invitation code is invalid or expired |
-| `already_in_group` | 409 | `lib/features/group/presentation/screens/join_group_screen.dart` | You are already a member of a group |
+| `already_in_group` | 409 | `lib/features/group/presentation/screens/join_group_screen.dart` | You are already a member of this group |
 | `too_many_attempts` | 429 | `lib/features/group/presentation/screens/join_group_screen.dart` | Too many attempts; please try again later |
 | `not_obligated` | 400 | `lib/features/payments/presentation/screens/submit_payment_screen.dart` | You are not obligated for this period |
 | `period_not_open` | 400 | `lib/features/payments/presentation/screens/submit_payment_screen.dart` | This period is not open for submission |

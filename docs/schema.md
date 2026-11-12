@@ -83,7 +83,19 @@ Single-use invitation codes created by group owners.
 | `created_at` | `TIMESTAMPTZ` | No | Default `NOW()` |
 | `expires_at` | `TIMESTAMPTZ` | No | Default `NOW() + INTERVAL '7 days'` |
 
-### 3.5 `payment_submissions`
+### 3.5 `invitation_attempts`
+Brute-force lockout and rate-limiting audit log for invitation acceptance.
+| Column | Type | Nullable | Constraints & Description |
+|---|---|---|---|
+| `id` | `UUID` | No | PK, default UUIDv7 |
+| `user_id` | `UUID` | No | FK -> `users.id` ON DELETE RESTRICT |
+| `attempted_at` | `TIMESTAMPTZ` | No | Default `NOW()` |
+| `succeeded` | `BOOLEAN` | No | `TRUE` if accepted, `FALSE` if invalid/expired/revoked |
+- **Rate-Limiting Rule**: 5 failed attempts within 15 minutes triggers a 429 `too_many_attempts` lockout with a `Retry-After` header. Successful redemption or expiration of the window clears the lockout.
+- **Indexes**: `CREATE INDEX idx_invitation_attempts_user_window ON invitation_attempts (user_id, attempted_at DESC);`
+- **Permissions**: `api_user` role has `SELECT`, `INSERT`, and `DELETE` (DELETE granted exclusively on this table for opportunistic 24-hour cleanup).
+
+### 3.6 `payment_submissions`
 Member payment submission lifecycle records.
 | Column | Type | Nullable | Constraints & Description |
 |---|---|---|---|
@@ -107,7 +119,7 @@ Member payment submission lifecycle records.
   - `UNIQUE (group_id, payment_method, reference)` WHERE `status IN ('pending', 'verified') AND reference IS NOT NULL`.
   - Index on `(group_id, member_id, period_month, submitted_at DESC)`.
 
-### 3.6 `ledger_entries` (APPEND-ONLY)
+### 3.7 `ledger_entries` (APPEND-ONLY)
 Immutable financial record of verified contributions, interest, expenses, and withdrawals.
 | Column | Type | Nullable | Constraints & Description |
 |---|---|---|---|
@@ -129,22 +141,22 @@ Immutable financial record of verified contributions, interest, expenses, and wi
   - `UNIQUE (reverses_entry_id)` (An entry cannot be reversed more than once).
   - Index on `(group_id, occurred_at DESC)`.
 
-### 3.7 `approval_requests`, `approval_eligible_voters` & `approval_votes`
+### 3.8 `approval_requests`, `approval_eligible_voters` & `approval_votes`
 Multi-member governance for shared fund withdrawals and expenses.
 - `approval_requests`: `id` (PK UUID), `group_id` (FK RESTRICT), `kind` (`'expense'`, `'withdrawal'`), `requester_member_id` (FK RESTRICT), `title`, `payee`, `description`, `amount_paisa`, `status` (`'open'`, `'approved'`, `'rejected'`, `'cancelled'`, `'executed'`), `created_at`, `expires_at`, `closed_at`, `executed_entry_id` (FK RESTRICT), `executed_by_member_id` (FK RESTRICT).
 - `approval_eligible_voters`: `(request_id UUID FK RESTRICT, member_id UUID FK RESTRICT, PRIMARY KEY (request_id, member_id))`.
 - `approval_votes`: `(request_id UUID FK RESTRICT, member_id UUID FK RESTRICT, approve BOOLEAN, voted_at TIMESTAMPTZ, PRIMARY KEY (request_id, member_id))`.
 
-### 3.8 `bank_reconciliations`
+### 3.9 `bank_reconciliations`
 Informational statement balance comparisons.
 - Columns: `id` (PK UUID), `group_id` (FK RESTRICT), `statement_date` (DATE), `bank_balance_paisa` (BIGINT), `recorded_balance_paisa` (BIGINT), `difference_paisa` (BIGINT), `note`, `recorded_by_member_id` (FK RESTRICT), `recorded_at` (TIMESTAMPTZ).
 - Constraints: `UNIQUE (group_id, statement_date)`.
 
-### 3.9 `audit_log` (APPEND-ONLY)
+### 3.10 `audit_log` (APPEND-ONLY)
 Append-only log of configuration changes and financial operations.
 - Columns: `id` (PK UUID), `group_id` (FK RESTRICT), `actor_user_id` (FK RESTRICT), `action` (VARCHAR), `field` (VARCHAR), `before_value` (TEXT), `after_value` (TEXT), `created_at` (TIMESTAMPTZ default `NOW()`).
 
-### 3.10 `idempotency_keys`
+### 3.11 `idempotency_keys`
 Deduplication cache for financial and group creation/join POST requests.
 | Column | Type | Nullable | Constraints & Description |
 |---|---|---|---|
@@ -160,12 +172,12 @@ Deduplication cache for financial and group creation/join POST requests.
 | `expires_at` | `TIMESTAMPTZ` | No | `NOW() + INTERVAL '48 hours'` |
 - **Scope & Constraints**:
   - Two partial unique indexes:
-    1. `CREATE UNIQUE INDEX idx_idempotency_group_scoped ON idempotency_keys (group_id, actor_user_id, operation, idempotency_key) WHERE group_id IS NOT NULL;`
+    1. `CREATE UNIQUE INDEX idx_idempotency_group_scoped ON idempotency_keys (group_id, operation, idempotency_key) WHERE group_id IS NOT NULL;`
     2. `CREATE UNIQUE INDEX idx_idempotency_user_scoped ON idempotency_keys (actor_user_id, operation, idempotency_key) WHERE group_id IS NULL;`
 - **Transaction & Locking Semantics**: The idempotency record is inserted in the SAME database transaction as the financial write, AFTER the group row lock (`FOR UPDATE`) is acquired. If the transaction aborts, no key record persists. If two concurrent requests supply the same key, the unique index serializes them: the winner executes and writes the response; the loser fails with unique constraint violation, waits, and reads the stored response.
 - **Natural Uniqueness as Second Line of Defense**: If a client retries after the 48-hour key window, natural schema constraints prevent duplicate financial mutations: method-scoped reference uniqueness on submissions, `reverses_entry_id` uniqueness on reversals, `(group_id, statement_date)` uniqueness on reconciliations, and `executed_entry_id` on approvals.
 
-### 3.11 `user_update_reads`
+### 3.12 `user_update_reads`
 Read timestamps per user to support persistent unread badges across devices.
 - `(user_id UUID FK RESTRICT, group_id UUID FK RESTRICT, feed_item_id VARCHAR(100), read_at TIMESTAMPTZ, PRIMARY KEY (user_id, group_id, feed_item_id))`.
 
@@ -230,7 +242,7 @@ Activity feed and transaction detail must display both verified ledger entries A
 ## 6. Database Roles and Migrations
 - **Database Roles**:
   - `migration_owner`: Full DDL privileges, owns tables, executes Prisma migrations, creates raw triggers and partial indexes.
-  - `api_user`: Runtime role used by Express. Has `SELECT`, `INSERT` on all tables; `UPDATE` on `groups`, `group_memberships`, `payment_submissions`, `approval_requests`, `invitations`; strictly `REVOKE UPDATE, DELETE ON ledger_entries, audit_log`.
+  - `api_user`: Runtime role used by Express. Has `SELECT`, `INSERT` on all tables; `UPDATE` on `groups`, `group_memberships`, `payment_submissions`, `approval_requests`, `invitations`; `DELETE` on `invitation_attempts` (for opportunistic rate-limit cleanup); strictly `REVOKE UPDATE, DELETE ON ledger_entries, audit_log`.
 - **Neon Specifics**:
   - `DATABASE_URL`: Pooled connection string (`port 6543`, `?pgbouncer=true`) for application runtime, avoiding connection exhaustion.
   - `DIRECT_URL`: Direct connection string (`port 5432`) configured as `directUrl` in `schema.prisma` for running DDL migrations and raw SQL triggers.
@@ -242,6 +254,7 @@ Activity feed and transaction detail must display both verified ledger entries A
 ```mermaid
 erDiagram
     users ||--o{ group_memberships : has
+    users ||--o{ invitation_attempts : attempts
     groups ||--o{ group_memberships : contains
     groups ||--o{ invitations : issues
     groups ||--o{ payment_submissions : receives
