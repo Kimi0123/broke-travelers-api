@@ -388,15 +388,18 @@ export class InvitationsService {
         };
       }
 
-      // Re-verify invitation
-      const lockedInv = await tx.invitation.findUnique({
-        where: { id: invitation.id },
-      });
+      // Re-verify invitation row with explicit row-level lock (FOR UPDATE)
+      const lockedRows = await tx.$queryRaw<
+        Array<{ id: string; status: string; expires_at: Date }>
+      >`
+        SELECT id, status, expires_at FROM invitations WHERE id = ${invitation.id}::uuid FOR UPDATE
+      `;
+      const lockedInv = lockedRows[0];
 
       if (
         !lockedInv ||
         lockedInv.status !== 'pending' ||
-        lockedInv.expiresAt < now
+        new Date(lockedInv.expires_at) < now
       ) {
         throw new HttpError(400, 'invalid_invitation_code');
       }
