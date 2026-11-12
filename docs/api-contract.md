@@ -39,11 +39,11 @@ Versioned HTTP REST API specification for Broke Travelers backend API.
   `{ "error": { "code": "too_many_attempts", "message": "Too many requests. Please try again later.", "requestId": "..." } }`
 
 ### 1.5 Idempotency
-- **Header**: `Idempotency-Key: <string>` required on all money-writing POST endpoints, `POST /v1/groups`, and `POST /v1/invitations/accept`. Clients generate a unique string (1 to 100 characters, e.g. UUIDv4) per form instance and reuse it on retry.
-- **Validation**: If the `Idempotency-Key` header is missing, the API returns 400 `idempotency_key_required`. If empty or > 100 characters, returns 400 `invalid_idempotency_key`.
+- **Header**: `Idempotency-Key: <string>` required on all money-writing POST endpoints, `POST /v1/groups`, and `POST /v1/invitations/accept`. Must be 8 to 100 characters of `[A-Za-z0-9_-]`.
+- **Validation**: If missing, returns 400 `idempotency_key_required`. If present but malformed (too short, too long, other characters, whitespace, unicode), returns 400 `invalid_idempotency_key`.
 - **Scopes**:
-  - Group-scoped (`(group_id, operation, key)`): payments, transactions, approvals, reconciliations.
-  - User-scoped (`(actor_user_id, operation, key)` where `group_id IS NULL`): `POST /v1/groups` and `POST /v1/invitations/accept`.
+  - Group-scoped (`(group_id, actor_user_id, operation, idempotency_key)`): payments, transactions, approvals, reconciliations, invitations.
+  - User-scoped (`(actor_user_id, operation, idempotency_key)` where `group_id IS NULL`): `POST /v1/groups` and `POST /v1/invitations/accept`.
 - **Replay & Conflict**: Replaying with identical body returns cached response with `Idempotent-Replay: true`. Mismatched body returns 409 `idempotency_conflict`.
 
 ### 1.6 Cold-Start & Health Handling
@@ -59,7 +59,7 @@ Versioned HTTP REST API specification for Broke Travelers backend API.
 #### `POST /v1/session`
 - **Replaces**: `AuthRepository.restoreSession`, `refreshCurrentUser`
 - **Auth**: Firebase Bearer Token | **Idempotent**: Yes
-- **Errors**: 401 `unauthorized` (missing/invalid token), 401 `invalid_token_claims` (token missing email)
+- **Errors**: 401 `unauthenticated` (missing/invalid token), 400 `invalid_token_claims` (token missing email)
 - **Request**: `{ "displayName": "Nirvan" }`
 - **Response 200**: `{ "user": { "id": "uuid", "name": "Nirvan", "email": "..." }, "groups": [...] }`
 
@@ -102,14 +102,14 @@ Versioned HTTP REST API specification for Broke Travelers backend API.
 #### `DELETE /v1/groups/:groupId/invitations/:invitationId`
 - **Replaces**: `InvitationsRepository.revokeInvitation`
 - **Auth**: Group Owner
-- **Errors**: 400 `invitation_not_revocable` (if invitation is already accepted, expired, or revoked).
+- **Errors**: 409 `invitation_not_revocable` (if invitation is already accepted, expired, or revoked).
 - **Response 200**: Updated invitation object with `status: "revoked"`.
 
 #### `POST /v1/invitations/accept`
 - **Replaces**: `InvitationsRepository.acceptInvitation`
 - **Auth**: Authenticated User | **Idempotent**: User-scoped (`Idempotency-Key` required)
 - **Request**: `{ "code": "HIMA2345" }`
-- **Rate Limit & Lockout**: 5 failed attempts within 15 minutes triggers 429 `too_many_attempts` with `Retry-After`. Successful accept clears window.
+- **Rate Limit & Lockout**: 5 failed attempts within 5 minutes triggers 429 `too_many_attempts` with `Retry-After`. Successful accept clears window.
 - **Multi-Group & Rejoining Semantics**: If user is already an active member of this group, returns 409 `already_in_group`. If user was previously removed (`left_at IS NOT NULL`), creates a new active membership row while preserving historical links.
 - **Errors**: Unknown, expired, or revoked codes return uniform 400 `invalid_invitation_code`.
 - **Response 200**: `{ "group": { ... }, "membership": { ... } }`.
@@ -130,7 +130,7 @@ Versioned HTTP REST API specification for Broke Travelers backend API.
 - **Replaces**: `MembersRepository.setTreasurerRole`
 - **Auth**: Group Owner
 - **Request**: `{ "isTreasurer": true }`
-- **Errors**: 404 `member_not_found` (if member not active or not in group), 409 `cannot_demote_last_treasurer` (cannot remove treasurer status if user is the only treasurer).
+- **Errors**: 404 `member_not_found` (if member not active or not in group), 409 `cannot_remove_last_treasurer` (cannot remove treasurer status if user is the only treasurer).
 - **Response 200**: Updated member object. Writes audit log row.
 
 #### `DELETE /v1/groups/:groupId/members/:memberId`
@@ -284,19 +284,19 @@ Versioned HTTP REST API specification for Broke Travelers backend API.
 | `group_not_found` | 404 | `lib/core/error/group_access_exception.dart` | Group not found or access denied |
 | `member_not_found` | 404 | `lib/features/group/presentation/screens/group_members_screen.dart` | Member not found |
 | `forbidden` | 403 | `lib/core/error/permission_denied_exception.dart` | You do not have permission to perform this action |
+| `unauthenticated` | 401 | `lib/core/error/auth_exceptions.dart` | Authentication required |
 | `user_not_provisioned` | 401 | `lib/core/error/auth_exceptions.dart` | User record not provisioned; session creation required |
-| `invalid_token_claims` | 401 | `lib/core/error/auth_exceptions.dart` | Token missing required claims (email) |
+| `invalid_token_claims` | 400 | `lib/core/error/auth_exceptions.dart` | Token missing required claims (email) |
 | `idempotency_key_required` | 400 | Backend middleware | Idempotency-Key header is required for this operation |
-| `invalid_idempotency_key` | 400 | Backend middleware | Idempotency-Key must be 1 to 100 characters |
+| `invalid_idempotency_key` | 400 | Backend middleware | Idempotency-Key must be 8 to 100 characters of [A-Za-z0-9_-] |
 | `idempotency_conflict` | 409 | `lib/core/error/ledger_posting_exception.dart` | Conflicting request payload for this idempotency key |
-| `invitation_not_revocable` | 400 | `lib/features/group/presentation/screens/group_settings_screen.dart` | Cannot revoke an invitation that is already accepted, expired, or revoked |
+| `invitation_not_revocable` | 409 | `lib/features/group/presentation/screens/group_settings_screen.dart` | Cannot revoke an invitation that is already accepted, expired, or revoked |
 | `email_not_verified` | 403 | *New backend requirement* | Please verify your email address before joining or creating a group |
 | `group_creation_failed`| 409 | `lib/core/error/group_creation_exception.dart` | Unable to create group for this user |
 | `invalid_group_settings`| 400 | `lib/core/error/group_validation_exception.dart` | Group name or due day failed validation |
 | `cannot_remove_owner` | 409 | `lib/core/error/member_removal_blocked_exception.dart`| The group owner cannot be removed |
 | `member_has_pending_payments`| 409 | `lib/core/error/member_removal_blocked_exception.dart`| Cannot remove member with pending payments |
-| `cannot_remove_last_treasurer`| 409 | `lib/core/error/member_removal_blocked_exception.dart`| Cannot remove the group's only treasurer |
-| `cannot_demote_last_treasurer`| 409 | `lib/features/group/presentation/screens/group_members_screen.dart`| Cannot remove the group's only treasurer |
+| `cannot_remove_last_treasurer`| 409 | `lib/features/members/presentation/screens/member_detail_screen.dart` | Cannot remove the group's only treasurer |
 | `insufficient_balance` | 409 | `lib/core/error/ledger_posting_exception.dart` | Insufficient verified balance to record transaction |
 | `report_range_invalid` | 400 | `lib/core/error/report_range_exception.dart` | Requested report period is outside the group's history |
 | `invalid_credentials` | 401 | `lib/features/authentication/presentation/auth_error_messages.dart` | Invalid email or password |

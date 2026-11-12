@@ -91,7 +91,7 @@ Brute-force lockout and rate-limiting audit log for invitation acceptance.
 | `user_id` | `UUID` | No | FK -> `users.id` ON DELETE RESTRICT |
 | `attempted_at` | `TIMESTAMPTZ` | No | Default `NOW()` |
 | `succeeded` | `BOOLEAN` | No | `TRUE` if accepted, `FALSE` if invalid/expired/revoked |
-- **Rate-Limiting Rule**: 5 failed attempts within 15 minutes triggers a 429 `too_many_attempts` lockout with a `Retry-After` header. Successful redemption or expiration of the window clears the lockout.
+- **Rate-Limiting Rule**: 5 failed attempts within 5 minutes triggers a 429 `too_many_attempts` lockout with a `Retry-After` header. Successful redemption or expiration of the window clears the lockout.
 - **Indexes**: `CREATE INDEX idx_invitation_attempts_user_window ON invitation_attempts (user_id, attempted_at DESC);`
 - **Permissions**: `api_user` role has `SELECT`, `INSERT`, and `DELETE` (DELETE granted exclusively on this table for opportunistic 24-hour cleanup).
 
