@@ -1,5 +1,9 @@
 import type { PrismaClient } from '@prisma/client';
-import type { PaymentMethod, PaymentStatus } from '../domain/enums.js';
+import type {
+  ActivityKind,
+  PaymentMethod,
+  PaymentStatus,
+} from '../domain/enums.js';
 import { monthStart, nextMonthStart } from '../domain/month-math.js';
 import { deriveObligationStatus } from '../domain/obligation-status.js';
 import { normalizePaymentReference } from '../domain/payment-reference.js';
@@ -19,7 +23,10 @@ import {
   sortBySeqAsc,
   type MappedLedgerEntry,
 } from '../infrastructure/db/mappers.js';
-import { utcInstantToNptWallClock } from '../infrastructure/time/npt.js';
+import {
+  nptWallClockToUtcInstant,
+  utcInstantToNptWallClock,
+} from '../infrastructure/time/npt.js';
 import {
   InvalidInputError,
   InvalidStatusTransitionError,
@@ -32,7 +39,6 @@ import {
   rejectPaymentSubmission,
   verifyPaymentSubmission,
 } from './posting-service.js';
-import type { DomainPaymentSubmission } from '../infrastructure/db/mappers.js';
 
 export interface SubmitPaymentParams {
   readonly groupId: string;
@@ -67,6 +73,55 @@ export interface MyPaymentItemDto {
   readonly note: string | null;
   readonly status: PaymentStatus;
   readonly submittedAt: string;
+  readonly rejectionReason: string | null;
+  readonly rejectionNote: string | null;
+}
+
+export interface VerifyPaymentResponseDto {
+  readonly submission: {
+    readonly id: string;
+    readonly groupId: string;
+    readonly memberId: string;
+    readonly periodMonth: string;
+    readonly amountPaisa: number;
+    readonly paymentMethod: PaymentMethod;
+    readonly reference: string | null;
+    readonly note: string | null;
+    readonly status: string;
+    readonly submittedAt: string;
+    readonly reviewedByMemberId: string | null;
+    readonly reviewedAt: string | null;
+    readonly postedLedgerEntryId: string | null;
+  };
+  readonly ledgerEntry: {
+    readonly id: string;
+    readonly groupId: string;
+    readonly kind: ActivityKind;
+    readonly title: string;
+    readonly magnitudePaisa: number;
+    readonly occurredAt: string;
+    readonly postedAt: string;
+    readonly memberId: string | null;
+    readonly periodMonth: string | null;
+    readonly paymentMethod: PaymentMethod | null;
+    readonly note: string | null;
+  };
+  readonly ledgerEntryId: string;
+}
+
+export interface RejectPaymentResponseDto {
+  readonly id: string;
+  readonly groupId: string;
+  readonly memberId: string;
+  readonly periodMonth: string;
+  readonly amountPaisa: number;
+  readonly paymentMethod: PaymentMethod;
+  readonly reference: string | null;
+  readonly note: string | null;
+  readonly status: string;
+  readonly submittedAt: string;
+  readonly reviewedByMemberId: string | null;
+  readonly reviewedAt: string | null;
   readonly rejectionReason: string | null;
   readonly rejectionNote: string | null;
 }
@@ -442,10 +497,7 @@ export class PaymentsService {
     readonly reviewerUserId: string;
     readonly idempotencyKey: string;
   }): Promise<{
-    readonly result: {
-      readonly submission: DomainPaymentSubmission;
-      readonly ledgerEntryId: string;
-    };
+    readonly result: VerifyPaymentResponseDto;
     readonly isReplay: boolean;
   }> {
     const {
@@ -477,10 +529,7 @@ export class PaymentsService {
         throw new HttpError(409, 'idempotency_conflict');
       }
       return {
-        result: earlyCheck.responseBody as unknown as {
-          submission: DomainPaymentSubmission;
-          ledgerEntryId: string;
-        },
+        result: earlyCheck.responseBody as unknown as VerifyPaymentResponseDto,
         isReplay: true,
       };
     }
@@ -520,9 +569,53 @@ export class PaymentsService {
         idempotencyKey,
       });
 
+      const periodMonthStr = `${verified.submission.periodMonth.y}-${String(verified.submission.periodMonth.m).padStart(2, '0')}-01`;
+      const subDto = {
+        id: verified.submission.id,
+        groupId: verified.submission.groupId,
+        memberId: verified.submission.memberId,
+        periodMonth: periodMonthStr,
+        amountPaisa: Number(verified.submission.amountPaisa),
+        paymentMethod: verified.submission.paymentMethod,
+        reference: verified.submission.reference,
+        note: verified.submission.note,
+        status: verified.submission.status,
+        submittedAt: nptWallClockToUtcInstant(
+          verified.submission.submittedAt,
+        ).toISOString(),
+        reviewedByMemberId: verified.submission.reviewedByMemberId,
+        reviewedAt: verified.submission.reviewedAt
+          ? nptWallClockToUtcInstant(
+              verified.submission.reviewedAt,
+            ).toISOString()
+          : null,
+        postedLedgerEntryId: verified.submission.postedLedgerEntryId,
+      };
+
+      const ledgerDto = {
+        id: verified.ledgerEntry.id,
+        groupId: verified.ledgerEntry.groupId,
+        kind: verified.ledgerEntry.kind,
+        title: verified.ledgerEntry.title,
+        magnitudePaisa: Number(verified.ledgerEntry.magnitudePaisa),
+        occurredAt: nptWallClockToUtcInstant(
+          verified.ledgerEntry.occurredAt,
+        ).toISOString(),
+        postedAt: nptWallClockToUtcInstant(
+          verified.ledgerEntry.postedAt,
+        ).toISOString(),
+        memberId: verified.ledgerEntry.memberId ?? null,
+        periodMonth: verified.ledgerEntry.periodMonth
+          ? `${verified.ledgerEntry.periodMonth.y}-${String(verified.ledgerEntry.periodMonth.m).padStart(2, '0')}-01`
+          : null,
+        paymentMethod: verified.ledgerEntry.paymentMethod ?? null,
+        note: verified.ledgerEntry.note ?? null,
+      };
+
       return {
         result: {
-          submission: verified.submission,
+          submission: subDto,
+          ledgerEntry: ledgerDto,
           ledgerEntryId: verified.ledgerEntry.id,
         },
         isReplay: false,
@@ -551,7 +644,7 @@ export class PaymentsService {
     readonly note?: string | null | undefined;
     readonly idempotencyKey: string;
   }): Promise<{
-    readonly submission: DomainPaymentSubmission;
+    readonly submission: RejectPaymentResponseDto;
     readonly isReplay: boolean;
   }> {
     const {
@@ -616,7 +709,7 @@ export class PaymentsService {
       }
       return {
         submission:
-          earlyCheck.responseBody as unknown as DomainPaymentSubmission,
+          earlyCheck.responseBody as unknown as RejectPaymentResponseDto,
         isReplay: true,
       };
     }
@@ -658,8 +751,32 @@ export class PaymentsService {
         idempotencyKey,
       });
 
+      const periodMonthStr = `${rejected.submission.periodMonth.y}-${String(rejected.submission.periodMonth.m).padStart(2, '0')}-01`;
+      const subDto = {
+        id: rejected.submission.id,
+        groupId: rejected.submission.groupId,
+        memberId: rejected.submission.memberId,
+        periodMonth: periodMonthStr,
+        amountPaisa: Number(rejected.submission.amountPaisa),
+        paymentMethod: rejected.submission.paymentMethod,
+        reference: rejected.submission.reference,
+        note: rejected.submission.note,
+        status: rejected.submission.status,
+        submittedAt: nptWallClockToUtcInstant(
+          rejected.submission.submittedAt,
+        ).toISOString(),
+        reviewedByMemberId: rejected.submission.reviewedByMemberId,
+        reviewedAt: rejected.submission.reviewedAt
+          ? nptWallClockToUtcInstant(
+              rejected.submission.reviewedAt,
+            ).toISOString()
+          : null,
+        rejectionReason: rejected.submission.rejectionReason,
+        rejectionNote: rejected.submission.rejectionNote,
+      };
+
       return {
-        submission: rejected.submission,
+        submission: subDto,
         isReplay: false,
       };
     } catch (err: unknown) {

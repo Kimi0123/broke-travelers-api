@@ -104,7 +104,7 @@ export const myPaymentItemSchema = z.object({
   paymentMethod: paymentMethodSchema,
   reference: z.string().nullable(),
   note: z.string().nullable(),
-  status: z.enum(['pending', 'verified', 'rejected']),
+  status: z.enum(['pending', 'pendingVerification', 'verified', 'rejected']),
   submittedAt: z.string(),
   rejectionReason: rejectionReasonSchema.nullable().optional(),
   rejectionNote: z.string().nullable().optional(),
