@@ -828,7 +828,7 @@ export async function reverseLedgerEntry(
         id: reversalId,
         groupId: entry.groupId,
         kind: entry.kind,
-        title: `Reversal: ${entry.title}`,
+        title: `Reversal: ${entry.title.slice(0, 50)}`,
         magnitudePaisa: entry.magnitudePaisa,
         occurredAt: now,
         postedAt: now,
