@@ -1,4 +1,6 @@
+import * as net from 'node:net';
 import dotenv from 'dotenv';
+import pg from 'pg';
 import type { PrismaClient } from '@prisma/client';
 import { generateId } from '../../src/infrastructure/db/ids.js';
 import {
@@ -15,6 +17,128 @@ export const TEST_DATABASE_URL =
 export const TEST_DIRECT_URL =
   process.env['TEST_DIRECT_URL'] ??
   'postgresql://migration_owner:migration_owner_local_dev_secret@localhost:5533/broke_travelers_test?schema=public';
+
+function parseHostPort(urlStr: string): { host: string; port: number } {
+  try {
+    const parsed = new URL(urlStr);
+    return {
+      host: parsed.hostname || 'localhost',
+      port: Number(parsed.port) || 5432,
+    };
+  } catch {
+    return { host: 'localhost', port: 5533 };
+  }
+}
+
+async function probeTcp(
+  host: string,
+  port: number,
+  timeoutMs = 2000,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const socket = new net.Socket();
+    let finished = false;
+
+    socket.setTimeout(timeoutMs);
+
+    socket.on('connect', () => {
+      finished = true;
+      socket.destroy();
+      resolve();
+    });
+
+    socket.on('timeout', () => {
+      if (!finished) {
+        finished = true;
+        socket.destroy();
+        reject(
+          new Error(
+            `TCP connection to ${host}:${port} timed out after ${timeoutMs}ms`,
+          ),
+        );
+      }
+    });
+
+    socket.on('error', (err) => {
+      if (!finished) {
+        finished = true;
+        socket.destroy();
+        reject(err);
+      }
+    });
+
+    socket.connect(port, host);
+  });
+}
+
+async function checkPrismaClient(): Promise<void> {
+  try {
+    const prismaModule = await import('@prisma/client');
+    if (!prismaModule.PrismaClient) {
+      throw new Error(
+        'PrismaClient constructor is not exported by @prisma/client',
+      );
+    }
+  } catch (err) {
+    const details = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `[PREFLIGHT CHECK FAILED] Prisma client is missing or cannot be imported.\n` +
+        `Please run: npm run prisma:generate\n` +
+        `Details: ${details}`,
+      { cause: err },
+    );
+  }
+}
+
+async function checkDatabaseReachable(): Promise<void> {
+  const dbUrl = TEST_DATABASE_URL;
+  const { host: dbHost, port: dbPort } = parseHostPort(dbUrl);
+
+  try {
+    await probeTcp(dbHost, dbPort, 2000);
+  } catch (err) {
+    const details = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `[PREFLIGHT CHECK FAILED] Test database is unreachable at ${dbHost}:${dbPort}.\n` +
+        `The PostgreSQL Docker container does not appear to be running or port ${dbPort} is blocked.\n` +
+        `Please start the database container with: npm run db:up\n` +
+        `Details: ${details}`,
+      { cause: err },
+    );
+  }
+
+  // Quick query check to verify database exists and credentials are valid
+  const client = new pg.Client({
+    connectionString: dbUrl,
+    connectionTimeoutMillis: 3000,
+  });
+  try {
+    await client.connect();
+    await client.query('SELECT 1');
+  } catch (err) {
+    const details = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `[PREFLIGHT CHECK FAILED] Test database at ${dbHost}:${dbPort} failed query check.\n` +
+        `Ensure migrations have run or start the database container with: npm run db:up\n` +
+        `Details: ${details}`,
+      { cause: err },
+    );
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
+let preflightPromise: Promise<void> | null = null;
+
+export async function verifyTestEnvironment(): Promise<void> {
+  if (!preflightPromise) {
+    preflightPromise = (async () => {
+      await checkPrismaClient();
+      await checkDatabaseReachable();
+    })();
+  }
+  return preflightPromise;
+}
 
 export function getTestPrisma(): PrismaClient {
   return getPrismaClient(TEST_DATABASE_URL);
@@ -34,6 +158,7 @@ export async function closeAllTestClients(): Promise<void> {
  * Temporarily disables user append-only triggers, executes TRUNCATE CASCADE, and re-enables triggers.
  */
 export async function resetTestDatabase(): Promise<void> {
+  await verifyTestEnvironment();
   const directPrisma = getTestDirectPrisma();
 
   await directPrisma.$executeRawUnsafe(`

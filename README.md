@@ -59,6 +59,53 @@ npm run build             # Build TypeScript output to dist/
 ```
 *(Note: `npm ci` generates the Prisma client automatically; run `npm run prisma:generate` after editing `prisma/schema.prisma`).*
 
+## Troubleshooting
+
+### 1. Database Unreachable or Container Not Running
+If running `npm run test:integration` or `npm run dev` fails with:
+```
+[PREFLIGHT CHECK FAILED] Test database is unreachable at localhost:5533.
+```
+- **Cause**: The PostgreSQL Docker container is stopped or Docker Desktop is not running.
+- **Fix**: Verify Docker status with `docker compose ps` and start the database with:
+  ```bash
+  npm run db:up
+  ```
+  Check container logs if needed:
+  ```bash
+  npm run db:logs
+  ```
+
+### 2. Missing Prisma Client
+If typecheck or test preflight fails with:
+```
+[PREFLIGHT CHECK FAILED] Prisma client is missing or cannot be imported.
+```
+- **Cause**: The Prisma client has not been generated into `node_modules/@prisma/client`.
+- **Fix**: Run:
+  ```bash
+  npm run prisma:generate
+  ```
+  *(Note: `npm ci` automatically generates the client via its postinstall hook).*
+
+### 3. Port 5533 Conflict & Hyper-V Dynamic Port Exclusions (Windows)
+- **Cause**: On Windows, Hyper-V or Windows NAT (WinNAT) dynamically reserves TCP port ranges, occasionally conflicting with exposed ports like 5533.
+- **Verification**: Check reserved port blocks in PowerShell:
+  ```powershell
+  netsh interface ipv4 show excludedportrange protocol=tcp
+  ```
+- **Fix**: If port 5533 falls within a reserved range, restart the WinNAT service in an administrative shell:
+  ```powershell
+  Restart-Service winnat
+  ```
+  Alternatively, update the external port mapping in `docker-compose.yml` and the corresponding port in `.env`.
+
+### 4. Resetting or Applying Migrations to the Database
+If tables or triggers are out of date:
+```bash
+npm run db:migrate
+```
+
 ## Documentation Index
 - [`docs/domain-rules.md`](docs/domain-rules.md): Authoritative business rules extracted from Flutter client.
 - [`docs/schema.md`](docs/schema.md): Relational PostgreSQL schema, immutability triggers, and concurrency.
