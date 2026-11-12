@@ -316,4 +316,93 @@ describe('Invitations HTTP Integration', () => {
     // Exactly one succeeds (200), the other fails with 400 invalid_invitation_code
     expect(statuses).toEqual([200, 400]);
   });
+
+  it('validates Idempotency-Key format on POST /v1/invitations/accept (missing, 7, 8, 100, 101, spaces, unicode, allowed chars)', async () => {
+    const fixture = await seedStandardGroup(directPrisma);
+    const ownerToken = FakeTokenVerifier.createToken(
+      `fb-${fixture.owner.user.id}`,
+      fixture.owner.user.email,
+      true,
+    );
+
+    // Create an invitation to accept
+    const invRes = await request(app)
+      .post(`/v1/groups/${fixture.group.id}/invitations`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('Idempotency-Key', 'format-inv-create-key')
+      .send();
+    expect(invRes.status).toBe(201);
+    const code = invRes.body.code as string;
+
+    const testToken = FakeTokenVerifier.createToken(
+      'key-format-invitee',
+      'invitee-format@test.com',
+      true,
+    );
+    await request(app)
+      .post('/v1/session')
+      .set('Authorization', `Bearer ${testToken}`)
+      .send({ displayName: 'Invitee Key Tester' });
+
+    // 1. Missing header -> 400 idempotency_key_required
+    const missingRes = await request(app)
+      .post('/v1/invitations/accept')
+      .set('Authorization', `Bearer ${testToken}`)
+      .send({ code });
+    expect(missingRes.status).toBe(400);
+    expect(missingRes.body.error.code).toBe('idempotency_key_required');
+
+    // 2. Too short (7 chars) -> 400 invalid_idempotency_key
+    const tooShortRes = await request(app)
+      .post('/v1/invitations/accept')
+      .set('Authorization', `Bearer ${testToken}`)
+      .set('Idempotency-Key', '1234567')
+      .send({ code });
+    expect(tooShortRes.status).toBe(400);
+    expect(tooShortRes.body.error.code).toBe('invalid_idempotency_key');
+
+    // 3. Too long (101 chars) -> 400 invalid_idempotency_key
+    const tooLongRes = await request(app)
+      .post('/v1/invitations/accept')
+      .set('Authorization', `Bearer ${testToken}`)
+      .set('Idempotency-Key', 'x'.repeat(101))
+      .send({ code });
+    expect(tooLongRes.status).toBe(400);
+    expect(tooLongRes.body.error.code).toBe('invalid_idempotency_key');
+
+    // 4. Spaces -> 400 invalid_idempotency_key
+    const spacesRes = await request(app)
+      .post('/v1/invitations/accept')
+      .set('Authorization', `Bearer ${testToken}`)
+      .set('Idempotency-Key', 'key with space')
+      .send({ code });
+    expect(spacesRes.status).toBe(400);
+    expect(spacesRes.body.error.code).toBe('invalid_idempotency_key');
+
+    // 5. Unicode -> 400 invalid_idempotency_key
+    const unicodeRes = await request(app)
+      .post('/v1/invitations/accept')
+      .set('Authorization', `Bearer ${testToken}`)
+      .set('Idempotency-Key', 'key-café-123')
+      .send({ code });
+    expect(unicodeRes.status).toBe(400);
+    expect(unicodeRes.body.error.code).toBe('invalid_idempotency_key');
+
+    // 6. Minimum valid length (8 chars) -> succeeds and accepts
+    const minValidRes = await request(app)
+      .post('/v1/invitations/accept')
+      .set('Authorization', `Bearer ${testToken}`)
+      .set('Idempotency-Key', '12345678')
+      .send({ code });
+    expect(minValidRes.status).toBe(200);
+
+    // 7. Allowed characters / replay with same key
+    const replayRes = await request(app)
+      .post('/v1/invitations/accept')
+      .set('Authorization', `Bearer ${testToken}`)
+      .set('Idempotency-Key', '12345678')
+      .send({ code });
+    expect(replayRes.status).toBe(200);
+    expect(replayRes.headers['idempotent-replay']).toBe('true');
+  });
 });

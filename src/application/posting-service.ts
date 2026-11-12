@@ -176,12 +176,20 @@ export async function postLedgerEntry(
     // 1. Group row lock
     await acquireGroupLock(tx, input.groupId);
 
+    // Resolve actor user id
+    const actorUserId = await resolveActorUserId(tx, {
+      actorUserId: input.actorUserId,
+      actorMemberId: input.actorMemberId,
+      groupId: input.groupId,
+    });
+
     // 2. Idempotency check
     if (input.idempotencyKey) {
       const check = await checkIdempotency<MappedLedgerEntry>(tx, {
         idempotencyKey: input.idempotencyKey,
         operation: 'post_ledger_entry',
         groupId: input.groupId,
+        actorUserId,
         payload: input,
       });
       if (check.existing) {
@@ -221,13 +229,6 @@ export async function postLedgerEntry(
         );
       }
     }
-
-    // Resolve actor user id
-    const actorUserId = await resolveActorUserId(tx, {
-      actorUserId: input.actorUserId,
-      actorMemberId: input.actorMemberId,
-      groupId: input.groupId,
-    });
 
     const occurredAtDate = toDate(input.occurredAt) ?? new Date();
     const periodMonthDate =
@@ -284,6 +285,7 @@ export async function postLedgerEntry(
         idempotencyKey: input.idempotencyKey,
         operation: 'post_ledger_entry',
         groupId: input.groupId,
+        actorUserId,
         payload: input,
       });
       await saveIdempotency(tx, {

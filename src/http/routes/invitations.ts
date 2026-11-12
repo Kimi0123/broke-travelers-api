@@ -10,6 +10,7 @@ import {
   requireUser,
   requireVerifiedEmail,
 } from '../middleware/auth.js';
+import { extractIdempotencyKey } from '../middleware/idempotency-key.js';
 import { loadMembership, requireOwner } from '../middleware/membership.js';
 
 export interface InvitationsRouteDeps {
@@ -47,10 +48,7 @@ export function createInvitationsRouter(deps: InvitationsRouteDeps): Router {
         throw new HttpError(404, 'group_not_found');
       }
 
-      const idempotencyKey = req.header('idempotency-key');
-      if (!idempotencyKey || idempotencyKey.trim().length === 0) {
-        throw new HttpError(400, 'idempotency_key_required');
-      }
+      const idempotencyKey = extractIdempotencyKey(req);
 
       const result = await invitationsService.createInvitation(
         groupId,
@@ -127,10 +125,7 @@ export function createInvitationsRouter(deps: InvitationsRouteDeps): Router {
         throw new HttpError(401, 'unauthenticated');
       }
 
-      const idempotencyKey = req.header('idempotency-key');
-      if (!idempotencyKey || idempotencyKey.trim().length === 0) {
-        throw new HttpError(400, 'idempotency_key_required');
-      }
+      const idempotencyKey = extractIdempotencyKey(req);
 
       const body = AcceptInvitationSchema.parse(req.body);
       const result = await invitationsService.acceptInvitation(

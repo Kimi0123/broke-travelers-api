@@ -109,4 +109,73 @@ describe('Idempotency Protocol Integration', () => {
     });
     expect(keyCount).toBe(1);
   });
+
+  it('proves that two different users in the same group may use the SAME key string independently without collision or cache leak', async () => {
+    const fixture = await seedStandardGroup(directPrisma);
+
+    const sharedKey = 'shared-key-across-actors-123';
+
+    // User 1 (Owner) posts an entry with sharedKey and amount 500,000 paisa
+    const responseOwner = await postLedgerEntry(apiPrisma, {
+      groupId: fixture.group.id,
+      actorMemberId: fixture.owner.membership.id,
+      kind: 'contribution',
+      title: 'Owner Deposit',
+      magnitudePaisa: 500000,
+      idempotencyKey: sharedKey,
+    });
+
+    // User 2 (Second Treasurer) posts an entry with SAME sharedKey and DIFFERENT amount 200,000 paisa
+    // Since scope is (groupId, actorUserId, operation, idempotencyKey), User 2 does NOT see
+    // an idempotency_conflict and does NOT receive User 1's cached response.
+    const responseTreasurer = await postLedgerEntry(apiPrisma, {
+      groupId: fixture.group.id,
+      actorMemberId: fixture.secondTreasurer.membership.id,
+      kind: 'contribution',
+      title: 'Treasurer Deposit',
+      magnitudePaisa: 200000,
+      idempotencyKey: sharedKey,
+    });
+
+    // Different entries created
+    expect(responseOwner.id).not.toBe(responseTreasurer.id);
+    expect(responseOwner.magnitudePaisa).toBe(500000);
+    expect(responseTreasurer.magnitudePaisa).toBe(200000);
+
+    // Replay for Owner gets Owner's cached response
+    const replayOwner = await postLedgerEntry(apiPrisma, {
+      groupId: fixture.group.id,
+      actorMemberId: fixture.owner.membership.id,
+      kind: 'contribution',
+      title: 'Owner Deposit',
+      magnitudePaisa: 500000,
+      idempotencyKey: sharedKey,
+    });
+    expect(replayOwner.id).toBe(responseOwner.id);
+    expect(replayOwner.magnitudePaisa).toBe(500000);
+
+    // Replay for Treasurer gets Treasurer's cached response
+    const replayTreasurer = await postLedgerEntry(apiPrisma, {
+      groupId: fixture.group.id,
+      actorMemberId: fixture.secondTreasurer.membership.id,
+      kind: 'contribution',
+      title: 'Treasurer Deposit',
+      magnitudePaisa: 200000,
+      idempotencyKey: sharedKey,
+    });
+    expect(replayTreasurer.id).toBe(responseTreasurer.id);
+    expect(replayTreasurer.magnitudePaisa).toBe(200000);
+
+    // Exactly 2 ledger entries exist in database
+    const count = await directPrisma.ledgerEntry.count({
+      where: { groupId: fixture.group.id },
+    });
+    expect(count).toBe(2);
+
+    // Exactly 2 idempotency records exist in database
+    const keyCount = await directPrisma.idempotencyKey.count({
+      where: { idempotencyKey: sharedKey },
+    });
+    expect(keyCount).toBe(2);
+  });
 });

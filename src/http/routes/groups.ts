@@ -10,6 +10,7 @@ import {
   requireUser,
   requireVerifiedEmail,
 } from '../middleware/auth.js';
+import { extractIdempotencyKey } from '../middleware/idempotency-key.js';
 import { loadMembership, requireOwner } from '../middleware/membership.js';
 
 export interface GroupsRouteDeps {
@@ -52,10 +53,7 @@ export function createGroupsRouter(deps: GroupsRouteDeps): Router {
         throw new HttpError(401, 'unauthenticated');
       }
 
-      const idempotencyKey = req.header('idempotency-key');
-      if (!idempotencyKey || idempotencyKey.trim().length === 0) {
-        throw new HttpError(400, 'idempotency_key_required');
-      }
+      const idempotencyKey = extractIdempotencyKey(req);
 
       const body = CreateGroupSchema.parse(req.body);
       const result = await groupsService.createGroup(

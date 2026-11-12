@@ -3,8 +3,13 @@ import type { PrismaClient } from '@prisma/client';
 import { generateId } from '../infrastructure/db/ids.js';
 import { withTransaction } from '../infrastructure/db/client.js';
 import { HttpError } from '../http/errors.js';
+import { IdempotencyConflictError } from './errors.js';
 import type { GroupResponse } from './groups-service.js';
-import { checkIdempotency, saveIdempotency } from './idempotency.js';
+import {
+  checkIdempotency,
+  computeRequestHash,
+  saveIdempotency,
+} from './idempotency.js';
 
 export const INVITATION_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 
@@ -280,6 +285,32 @@ export class InvitationsService {
       throw new HttpError(400, 'idempotency_key_required');
     }
 
+    const normalizedCode = (rawCode ?? '').trim().toUpperCase();
+
+    // 0. Early idempotency check (exact replay returns cached response without rate-limit or state conflicts)
+    const earlyCheck = await this.prisma.idempotencyKey.findFirst({
+      where: {
+        idempotencyKey,
+        operation: 'accept_invitation',
+        groupId: null,
+        actorUserId: userId,
+      },
+    });
+
+    if (earlyCheck) {
+      const requestHash = computeRequestHash({ code: normalizedCode });
+      if (earlyCheck.requestHash !== requestHash) {
+        throw new IdempotencyConflictError(
+          `Idempotency key '${idempotencyKey}' was already used with a different request payload`,
+        );
+      }
+      return {
+        data: earlyCheck.responseBody as unknown as AcceptInvitationResult,
+        isReplay: true,
+        status: earlyCheck.responseStatus,
+      };
+    }
+
     const now = this.clock ? this.clock() : new Date();
 
     // 1. Brute-force lockout check (5 failures in 5 minutes)
@@ -321,7 +352,6 @@ export class InvitationsService {
     }
 
     // 2. Validate format and look up code
-    const normalizedCode = (rawCode ?? '').trim().toUpperCase();
     if (normalizedCode.length !== 8) {
       await this.prisma.invitationAttempt.create({
         data: {

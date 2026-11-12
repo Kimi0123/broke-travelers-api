@@ -146,10 +146,11 @@ describe('Groups HTTP Integration', () => {
 
     // Invalid monthlyContributionPaisa (0, negative, floating point, > 10,000,000 NPR)
     for (const badAmount of [0, -500, 100.5, 10_000_000_01]) {
+      const sanitizedKey = `bad-amt-${String(badAmount).replace(/[^A-Za-z0-9_-]/g, '_')}`;
       const res = await request(app)
         .post('/v1/groups')
         .set('Authorization', `Bearer ${token}`)
-        .set('Idempotency-Key', `bad-amt-${badAmount}`)
+        .set('Idempotency-Key', sanitizedKey)
         .send({
           name: 'Valid Name',
           monthlyContributionPaisa: badAmount,
@@ -271,5 +272,91 @@ describe('Groups HTTP Integration', () => {
       monthlyContributionPaisa: Number(fixture.group.expectedPaisa),
       memberCount: 5,
     });
+  });
+
+  it('validates Idempotency-Key format on POST /v1/groups (missing, 7, 8, 100, 101, spaces, unicode, allowed chars)', async () => {
+    const token = FakeTokenVerifier.createToken(
+      'key-format-user',
+      'key-format@test.com',
+      true,
+    );
+    await request(app)
+      .post('/v1/session')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ displayName: 'Key Validator' });
+
+    const payload = {
+      name: 'Format Group',
+      monthlyContributionPaisa: 500000,
+      dueDay: 10,
+    };
+
+    // 1. Missing header -> 400 idempotency_key_required
+    const missingRes = await request(app)
+      .post('/v1/groups')
+      .set('Authorization', `Bearer ${token}`)
+      .send(payload);
+    expect(missingRes.status).toBe(400);
+    expect(missingRes.body.error.code).toBe('idempotency_key_required');
+
+    // 2. Too short (7 chars) -> 400 invalid_idempotency_key
+    const tooShortRes = await request(app)
+      .post('/v1/groups')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Idempotency-Key', '1234567')
+      .send(payload);
+    expect(tooShortRes.status).toBe(400);
+    expect(tooShortRes.body.error.code).toBe('invalid_idempotency_key');
+
+    // 3. Too long (101 chars) -> 400 invalid_idempotency_key
+    const tooLongRes = await request(app)
+      .post('/v1/groups')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Idempotency-Key', 'k'.repeat(101))
+      .send(payload);
+    expect(tooLongRes.status).toBe(400);
+    expect(tooLongRes.body.error.code).toBe('invalid_idempotency_key');
+
+    // 4. Contains spaces -> 400 invalid_idempotency_key
+    const spacesRes = await request(app)
+      .post('/v1/groups')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Idempotency-Key', 'key with space')
+      .send(payload);
+    expect(spacesRes.status).toBe(400);
+    expect(spacesRes.body.error.code).toBe('invalid_idempotency_key');
+
+    // 5. Contains unicode -> 400 invalid_idempotency_key
+    const unicodeRes = await request(app)
+      .post('/v1/groups')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Idempotency-Key', 'key-café-123')
+      .send(payload);
+    expect(unicodeRes.status).toBe(400);
+    expect(unicodeRes.body.error.code).toBe('invalid_idempotency_key');
+
+    // 6. Minimum valid length (8 chars) -> 201
+    const minValidRes = await request(app)
+      .post('/v1/groups')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Idempotency-Key', '12345678')
+      .send(payload);
+    expect(minValidRes.status).toBe(201);
+
+    // 7. Maximum valid length (100 chars) -> 201
+    const maxValidRes = await request(app)
+      .post('/v1/groups')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Idempotency-Key', 'm'.repeat(100))
+      .send({ ...payload, name: 'Max Key Group' });
+    expect(maxValidRes.status).toBe(201);
+
+    // 8. Allowed characters ([A-Za-z0-9_-]) -> 201
+    const allowedCharsRes = await request(app)
+      .post('/v1/groups')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Idempotency-Key', 'Valid_Key-123456')
+      .send({ ...payload, name: 'Allowed Chars Group' });
+    expect(allowedCharsRes.status).toBe(201);
   });
 });
