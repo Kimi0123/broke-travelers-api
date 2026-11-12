@@ -23,6 +23,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate Prisma Client
+        run: npm run prisma:generate
+
       - name: Lint
         run: npm run lint
 
@@ -65,14 +68,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate Prisma Client
+        run: npm run prisma:generate
+
       - name: Initialize roles and databases
         env:
           PGPASSWORD: postgres_local_dev_secret
         run: |
           psql -h localhost -p 5432 -U postgres -d broke_travelers -f docker/initdb/01-roles.sql
-
-      - name: Generate Prisma Client
-        run: npm run prisma:generate
 
       - name: Run migrations on test database
         env:

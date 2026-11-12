@@ -57,6 +57,7 @@ npm run format:check      # Prettier format check
 npm run typecheck         # TypeScript compiler check
 npm run build             # Build TypeScript output to dist/
 ```
+*(Note: `npm ci` generates the Prisma client automatically; run `npm run prisma:generate` after editing `prisma/schema.prisma`).*
 
 ## Documentation Index
 - [`docs/domain-rules.md`](docs/domain-rules.md): Authoritative business rules extracted from Flutter client.
