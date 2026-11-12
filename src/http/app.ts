@@ -12,6 +12,7 @@ import { createErrorHandler } from './errors.js';
 import { requestIdMiddleware } from './middleware/request-id.js';
 import { createGroupsRouter } from './routes/groups.js';
 import { createInvitationsRouter } from './routes/invitations.js';
+import { createMembersRouter } from './routes/members.js';
 import { createProfileRouter } from './routes/profile.js';
 import { createSessionRouter } from './routes/session.js';
 
@@ -130,6 +131,14 @@ export function createApp(deps: AppDependencies): Express {
         prisma: deps.prisma,
         tokenVerifier: deps.tokenVerifier,
         config: deps.config,
+        clock: deps.clock,
+        idGenerator: deps.idGenerator,
+      }),
+    );
+    app.use(
+      createMembersRouter({
+        prisma: deps.prisma,
+        tokenVerifier: deps.tokenVerifier,
         clock: deps.clock,
         idGenerator: deps.idGenerator,
       }),
