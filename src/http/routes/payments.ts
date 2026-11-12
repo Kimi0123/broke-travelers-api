@@ -9,7 +9,10 @@ import {
   requireIdempotencyKey,
 } from '../middleware/idempotency-key.js';
 import { loadMembership, requireTreasurer } from '../middleware/membership.js';
-import { submitPaymentRequestSchema } from '../schemas/financial.js';
+import {
+  rejectPaymentRequestSchema,
+  submitPaymentRequestSchema,
+} from '../schemas/financial.js';
 
 export interface PaymentsRouteDeps {
   readonly prisma: PrismaClient;
@@ -134,8 +137,33 @@ export function createPaymentsRouter(deps: PaymentsRouteDeps): Router {
     loadMembership(deps.prisma),
     requireTreasurer,
     requireIdempotencyKey,
-    (_req, res) => {
-      res.status(200).json({});
+    async (req, res) => {
+      const rawGroupId = req.params['groupId'];
+      const groupId = Array.isArray(rawGroupId) ? rawGroupId[0] : rawGroupId;
+      const rawSubmissionId = req.params['submissionId'];
+      const submissionId = Array.isArray(rawSubmissionId)
+        ? rawSubmissionId[0]
+        : rawSubmissionId;
+      const user = req.user;
+      const membership = req.membership;
+
+      if (!groupId || !submissionId || !user || !membership) {
+        throw new HttpError(404, 'group_not_found');
+      }
+
+      const idempotencyKey = extractIdempotencyKey(req);
+      const { result, isReplay } = await service.verifyPayment({
+        groupId,
+        submissionId,
+        reviewerMemberId: membership.membershipId,
+        reviewerUserId: user.id,
+        idempotencyKey,
+      });
+
+      if (isReplay) {
+        res.setHeader('Idempotent-Replay', 'true');
+      }
+      res.status(200).json(result);
     },
   );
 
@@ -147,8 +175,40 @@ export function createPaymentsRouter(deps: PaymentsRouteDeps): Router {
     loadMembership(deps.prisma),
     requireTreasurer,
     requireIdempotencyKey,
-    (_req, res) => {
-      res.status(200).json({});
+    async (req, res) => {
+      const rawGroupId = req.params['groupId'];
+      const groupId = Array.isArray(rawGroupId) ? rawGroupId[0] : rawGroupId;
+      const rawSubmissionId = req.params['submissionId'];
+      const submissionId = Array.isArray(rawSubmissionId)
+        ? rawSubmissionId[0]
+        : rawSubmissionId;
+      const user = req.user;
+      const membership = req.membership;
+
+      if (!groupId || !submissionId || !user || !membership) {
+        throw new HttpError(404, 'group_not_found');
+      }
+
+      const parsed = rejectPaymentRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new HttpError(400, 'invalid_review_input', parsed.error.message);
+      }
+
+      const idempotencyKey = extractIdempotencyKey(req);
+      const { submission, isReplay } = await service.rejectPayment({
+        groupId,
+        submissionId,
+        reviewerMemberId: membership.membershipId,
+        reviewerUserId: user.id,
+        reason: parsed.data.reason,
+        note: parsed.data.note,
+        idempotencyKey,
+      });
+
+      if (isReplay) {
+        res.setHeader('Idempotent-Replay', 'true');
+      }
+      res.status(200).json({ submission });
     },
   );
 

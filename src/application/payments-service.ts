@@ -20,8 +20,19 @@ import {
   type MappedLedgerEntry,
 } from '../infrastructure/db/mappers.js';
 import { utcInstantToNptWallClock } from '../infrastructure/time/npt.js';
+import {
+  InvalidInputError,
+  InvalidStatusTransitionError,
+  NotFoundError,
+  PermissionDeniedError,
+} from './errors.js';
 import { computeRequestHash, saveIdempotency } from './idempotency.js';
-import { acquireGroupLock } from './posting-service.js';
+import {
+  acquireGroupLock,
+  rejectPaymentSubmission,
+  verifyPaymentSubmission,
+} from './posting-service.js';
+import type { DomainPaymentSubmission } from '../infrastructure/db/mappers.js';
 
 export interface SubmitPaymentParams {
   readonly groupId: string;
@@ -422,5 +433,249 @@ export class PaymentsService {
         isOwnSubmission: sub.memberId === callerMemberId,
       };
     });
+  }
+
+  async verifyPayment(params: {
+    readonly groupId: string;
+    readonly submissionId: string;
+    readonly reviewerMemberId: string;
+    readonly reviewerUserId: string;
+    readonly idempotencyKey: string;
+  }): Promise<{
+    readonly result: {
+      readonly submission: DomainPaymentSubmission;
+      readonly ledgerEntryId: string;
+    };
+    readonly isReplay: boolean;
+  }> {
+    const {
+      groupId,
+      submissionId,
+      reviewerMemberId,
+      reviewerUserId,
+      idempotencyKey,
+    } = params;
+
+    const payloadHash = computeRequestHash({
+      groupId,
+      submissionId,
+      action: 'verify',
+    });
+
+    // 1. Early idempotency check
+    const earlyCheck = await this.prisma.idempotencyKey.findFirst({
+      where: {
+        idempotencyKey,
+        operation: 'verify_submission',
+        groupId,
+        actorUserId: reviewerUserId,
+      },
+    });
+
+    if (earlyCheck) {
+      if (earlyCheck.requestHash !== payloadHash) {
+        throw new HttpError(409, 'idempotency_conflict');
+      }
+      return {
+        result: earlyCheck.responseBody as unknown as {
+          submission: DomainPaymentSubmission;
+          ledgerEntryId: string;
+        },
+        isReplay: true,
+      };
+    }
+
+    // 2. Preflight checks
+    const sub = await this.prisma.paymentSubmission.findUnique({
+      where: { id: submissionId },
+    });
+    if (!sub || sub.groupId !== groupId) {
+      throw new HttpError(404, 'submission_not_found');
+    }
+    if (sub.status !== 'pending') {
+      throw new HttpError(409, 'already_reviewed');
+    }
+
+    // 3. Self-review check
+    if (sub.memberId === reviewerMemberId) {
+      const otherTreasurers = await this.prisma.groupMembership.count({
+        where: {
+          groupId,
+          isTreasurer: true,
+          leftAt: null,
+          id: { not: reviewerMemberId },
+        },
+      });
+      if (otherTreasurers > 0) {
+        throw new HttpError(403, 'cannot_review_own_payment');
+      }
+    }
+
+    try {
+      const verified = await verifyPaymentSubmission(this.prisma, {
+        groupId,
+        submissionId,
+        reviewerMemberId,
+        reviewerUserId,
+        idempotencyKey,
+      });
+
+      return {
+        result: {
+          submission: verified.submission,
+          ledgerEntryId: verified.ledgerEntry.id,
+        },
+        isReplay: false,
+      };
+    } catch (err: unknown) {
+      if (err instanceof NotFoundError) {
+        throw new HttpError(404, 'submission_not_found');
+      }
+      if (err instanceof InvalidStatusTransitionError) {
+        throw new HttpError(409, 'already_reviewed');
+      }
+      if (err instanceof PermissionDeniedError) {
+        throw new HttpError(403, 'cannot_review_own_payment');
+      }
+      throw err;
+    }
+  }
+
+  async rejectPayment(params: {
+    readonly groupId: string;
+    readonly submissionId: string;
+    readonly reviewerMemberId: string;
+    readonly reviewerUserId: string;
+    readonly reason:
+      'notReceived' | 'wrongAmount' | 'referenceNotFound' | 'other';
+    readonly note?: string | null | undefined;
+    readonly idempotencyKey: string;
+  }): Promise<{
+    readonly submission: DomainPaymentSubmission;
+    readonly isReplay: boolean;
+  }> {
+    const {
+      groupId,
+      submissionId,
+      reviewerMemberId,
+      reviewerUserId,
+      reason,
+      note,
+      idempotencyKey,
+    } = params;
+
+    const validReasons = [
+      'notReceived',
+      'wrongAmount',
+      'referenceNotFound',
+      'other',
+    ];
+    if (!validReasons.includes(reason)) {
+      throw new HttpError(
+        400,
+        'invalid_review_input',
+        `Invalid rejection reason: '${reason}'`,
+      );
+    }
+    if (reason === 'other' && (!note || note.trim().length === 0)) {
+      throw new HttpError(
+        400,
+        'invalid_review_input',
+        'Rejection note is required when reason is "other"',
+      );
+    }
+    if (note && note.trim().length > 200) {
+      throw new HttpError(
+        400,
+        'invalid_review_input',
+        'Rejection note cannot exceed 200 characters',
+      );
+    }
+
+    const payloadHash = computeRequestHash({
+      groupId,
+      submissionId,
+      reason,
+      note: note?.trim() || null,
+      action: 'reject',
+    });
+
+    // 1. Early idempotency check
+    const earlyCheck = await this.prisma.idempotencyKey.findFirst({
+      where: {
+        idempotencyKey,
+        operation: 'reject_submission',
+        groupId,
+        actorUserId: reviewerUserId,
+      },
+    });
+
+    if (earlyCheck) {
+      if (earlyCheck.requestHash !== payloadHash) {
+        throw new HttpError(409, 'idempotency_conflict');
+      }
+      return {
+        submission:
+          earlyCheck.responseBody as unknown as DomainPaymentSubmission,
+        isReplay: true,
+      };
+    }
+
+    // 2. Preflight checks
+    const sub = await this.prisma.paymentSubmission.findUnique({
+      where: { id: submissionId },
+    });
+    if (!sub || sub.groupId !== groupId) {
+      throw new HttpError(404, 'submission_not_found');
+    }
+    if (sub.status !== 'pending') {
+      throw new HttpError(409, 'already_reviewed');
+    }
+
+    // 3. Self-review check
+    if (sub.memberId === reviewerMemberId) {
+      const otherTreasurers = await this.prisma.groupMembership.count({
+        where: {
+          groupId,
+          isTreasurer: true,
+          leftAt: null,
+          id: { not: reviewerMemberId },
+        },
+      });
+      if (otherTreasurers > 0) {
+        throw new HttpError(403, 'cannot_review_own_payment');
+      }
+    }
+
+    try {
+      const rejected = await rejectPaymentSubmission(this.prisma, {
+        groupId,
+        submissionId,
+        reviewerMemberId,
+        reviewerUserId,
+        rejectionReason: reason,
+        rejectionNote: note,
+        idempotencyKey,
+      });
+
+      return {
+        submission: rejected.submission,
+        isReplay: false,
+      };
+    } catch (err: unknown) {
+      if (err instanceof NotFoundError) {
+        throw new HttpError(404, 'submission_not_found');
+      }
+      if (err instanceof InvalidStatusTransitionError) {
+        throw new HttpError(409, 'already_reviewed');
+      }
+      if (err instanceof PermissionDeniedError) {
+        throw new HttpError(403, 'cannot_review_own_payment');
+      }
+      if (err instanceof InvalidInputError) {
+        throw new HttpError(400, 'invalid_review_input');
+      }
+      throw err;
+    }
   }
 }
