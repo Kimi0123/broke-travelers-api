@@ -149,6 +149,7 @@ Versioned HTTP REST API specification for Broke Travelers backend API.
 #### `GET /v1/groups/:groupId/contributions/periods` & `GET .../periods/:periodId`
 - **Replaces**: `ContributionsRepository.getPeriods`, `getPeriod`
 - **Auth**: Active Member | **Derivation**: Read-only. Returns period summaries and member obligations.
+- **Errors**: 404 `period_not_found` (unknown or out-of-range period).
 
 #### `POST /v1/groups/:groupId/payments`
 - **Replaces**: `PaymentsRepository.submitPayment`
@@ -287,6 +288,7 @@ Versioned HTTP REST API specification for Broke Travelers backend API.
 | `unauthenticated` | 401 | `lib/core/error/auth_exceptions.dart` | Authentication required |
 | `user_not_provisioned` | 401 | `lib/core/error/auth_exceptions.dart` | User record not provisioned; session creation required |
 | `invalid_token_claims` | 400 | `lib/core/error/auth_exceptions.dart` | Token missing required claims (email) |
+| `invalid_cursor` | 400 | Backend middleware | Pagination cursor is invalid or malformed |
 | `idempotency_key_required` | 400 | Backend middleware | Idempotency-Key header is required for this operation |
 | `invalid_idempotency_key` | 400 | Backend middleware | Idempotency-Key must be 8 to 100 characters of [A-Za-z0-9_-] |
 | `idempotency_conflict` | 409 | `lib/core/error/ledger_posting_exception.dart` | Conflicting request payload for this idempotency key |
@@ -307,6 +309,7 @@ Versioned HTTP REST API specification for Broke Travelers backend API.
 | `too_many_attempts` | 429 | `lib/features/group/presentation/screens/join_group_screen.dart` | Too many attempts; please try again later |
 | `not_obligated` | 400 | `lib/features/payments/presentation/screens/submit_payment_screen.dart` | You are not obligated for this period |
 | `period_not_open` | 400 | `lib/features/payments/presentation/screens/submit_payment_screen.dart` | This period is not open for submission |
+| `period_not_found` | 404 | `lib/features/contributions/presentation/screens/contributions_screen.dart` | Contribution period not found |
 | `already_submitted` | 409 | `lib/features/payments/presentation/screens/submit_payment_screen.dart` | A payment has already been submitted for this period |
 | `duplicate_reference` | 409 | `lib/features/payments/presentation/screens/submit_payment_screen.dart` | This reference has already been used for another payment. |
 | `invalid_payment_input`| 400 | `lib/features/payments/presentation/screens/submit_payment_screen.dart` | Please check the form for errors |
