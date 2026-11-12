@@ -117,26 +117,57 @@ Versioned HTTP REST API specification for Broke Travelers backend API.
 ---
 
 ### 2.2 Members & Roles
-#### `GET /v1/groups/:groupId/members`
+#### `GET /v1/groups/:groupId/members` (IMPLEMENTED)
 - **Replaces**: `MembersRepository.getMembers`
 - **Auth**: Active Member | **Derivation**: Read-only
-- **Errors**: Non-members and unknown groups return uniform 404 `group_not_found`.
+- **Errors**: 404 `group_not_found`
 - **Ordering & Privacy**: Active members (`left_at IS NULL`) ordered by `joined_at ASC, id ASC`. Internal auth identifiers (`firebaseUid`) and other members' email addresses are strictly omitted.
 - **Obligation**: Dynamically derives `currentPeriodStatus` via `deriveObligationStatus`.
 - **Response 200**: `{ "members": [ ... ] }`.
-- *(Note: Member detail `GET /v1/groups/:groupId/members/:memberId` moved to Task 5.4 alongside contribution history).*
 
-#### `PATCH /v1/groups/:groupId/members/:memberId/role`
+#### `GET /v1/groups/:groupId/members/:memberId` (IMPLEMENTED)
+- **Replaces**: `MembersRepository.getMemberDetail`
+- **Auth**: Active Member | **Derivation**: Read-only
+- **Errors**: 404 `group_not_found`, 404 `member_not_found`
+- **Privacy Filtering**: Only Treasurers and the member themselves see payment references in the contribution history. Non-treasurer members viewing another member's profile receive `reference: null`.
+- **Response 200**:
+  ```json
+  {
+    "member": {
+      "id": "uuid",
+      "name": "Nirvan",
+      "role": "owner",
+      "isTreasurer": true,
+      "joinedAt": "2026-08-01T00:00:00.000Z",
+      "verifiedTotalPaisa": 210000,
+      "pendingTotalPaisa": 0,
+      "verifiedMonthCount": 3,
+      "history": [
+        {
+          "periodMonth": "2026-11",
+          "status": "paid",
+          "paidAt": "2026-11-02T10:00:00.000Z",
+          "amountPaisa": 70000,
+          "method": "esewa",
+          "reference": "ESW12345"
+        }
+      ]
+    }
+  }
+  ```
+
+#### `PATCH /v1/groups/:groupId/members/:memberId/role` (IMPLEMENTED)
 - **Replaces**: `MembersRepository.setTreasurerRole`
 - **Auth**: Group Owner
 - **Request**: `{ "isTreasurer": true }`
 - **Errors**: 404 `member_not_found` (if member not active or not in group), 409 `cannot_remove_last_treasurer` (cannot remove treasurer status if user is the only treasurer).
 - **Response 200**: Updated member object. Writes audit log row.
 
-#### `DELETE /v1/groups/:groupId/members/:memberId`
+#### `DELETE /v1/groups/:groupId/members/:memberId` (IMPLEMENTED)
 - **Replaces**: `MembersRepository.removeMember`
 - **Auth**: Group Owner
-- **Errors & Invariant Precedence**:
+- **Errors**: 404 `member_not_found`, 409 `cannot_remove_owner`, 409 `member_has_pending_payments`, 409 `cannot_remove_last_treasurer`
+- **Invariant Precedence**:
   1. Target is group owner -> 409 `cannot_remove_owner`
   2. Target has pending payment submissions -> 409 `member_has_pending_payments`
   3. Target is the last treasurer -> 409 `cannot_remove_last_treasurer`
@@ -146,38 +177,153 @@ Versioned HTTP REST API specification for Broke Travelers backend API.
 ---
 
 ### 2.3 Contributions & Payments
-#### `GET /v1/groups/:groupId/contributions/periods` & `GET .../periods/:periodId`
-- **Replaces**: `ContributionsRepository.getPeriods`, `getPeriod`
-- **Auth**: Active Member | **Derivation**: Read-only. Returns period summaries and member obligations.
-- **Errors**: 404 `period_not_found` (unknown or out-of-range period).
+#### `GET /v1/groups/:groupId/contributions/periods` (IMPLEMENTED)
+- **Replaces**: `ContributionsRepository.getPeriods`
+- **Auth**: Active Member | **Derivation**: Read-only
+- **Errors**: 404 `group_not_found`
+- **Response 200**:
+  ```json
+  {
+    "periods": [
+      {
+        "id": "2026-11",
+        "month": "2026-11",
+        "expectedAmountPaisa": 70000,
+        "collectedAmountPaisa": 210000,
+        "totalObligatedPaisa": 280000,
+        "paidCount": 3,
+        "obligatedCount": 4,
+        "myStatus": "paid",
+        "isCurrent": true
+      }
+    ]
+  }
+  ```
 
-#### `POST /v1/groups/:groupId/payments`
+#### `GET /v1/groups/:groupId/contributions/periods/:periodId` (IMPLEMENTED)
+- **Replaces**: `ContributionsRepository.getPeriod`
+- **Auth**: Active Member | **Derivation**: Read-only
+- **Errors**: 404 `group_not_found`, 404 `period_not_found`
+- **Response 200**:
+  ```json
+  {
+    "period": {
+      "id": "2026-11",
+      "month": "2026-11",
+      "expectedAmountPaisa": 70000,
+      "collectedAmountPaisa": 210000,
+      "totalObligatedPaisa": 280000,
+      "paidCount": 3,
+      "obligatedCount": 4,
+      "myStatus": "paid",
+      "isCurrent": true
+    },
+    "obligations": [
+      {
+        "memberId": "uuid",
+        "memberName": "Nirvan",
+        "status": "paid",
+        "paidAt": "2026-11-02T10:00:00.000Z",
+        "amountPaisa": 70000
+      }
+    ]
+  }
+  ```
+
+#### `POST /v1/groups/:groupId/payments` (IMPLEMENTED)
 - **Replaces**: `PaymentsRepository.submitPayment`
-- **Auth**: Active Member | **Idempotent**: Group-scoped (`Idempotency-Key`)
-- **Request**: `{ "periodId": "2026-11", "method": "esewa", "reference": "ESW12345", "note": "Nov fee" }`
-- **Response 201**: Submission object. `amountPaisa` set by server. Reference normalized.
+- **Auth**: Active Member | **Idempotent**: Group-scoped (`Idempotency-Key` required)
+- **Request**:
+  ```json
+  {
+    "periodId": "2026-11",
+    "method": "esewa",
+    "reference": "ESW12345",
+    "note": "Nov fee"
+  }
+  ```
+- **Errors**: 400 `idempotency_key_required`, 400 `invalid_idempotency_key`, 400 `invalid_request`, 400 `not_obligated`, 400 `period_not_open`, 404 `group_not_found`, 409 `already_submitted`, 409 `duplicate_reference`, 409 `idempotency_conflict`
+- **Response 201**: Submission object. `amountPaisa` is derived server-side from group settings (client amounts are strictly rejected). Reference is normalized.
 
-#### `GET /v1/groups/:groupId/payments/my`
+#### `GET /v1/groups/:groupId/payments/my` (IMPLEMENTED)
 - **Replaces**: `PaymentsRepository.getMyPayments`
-- **Auth**: Active Member | **Derivation**: Read-only. References masked as `Ref ••••3456`.
+- **Auth**: Active Member | **Derivation**: Read-only
+- **Errors**: 404 `group_not_found`
+- **Privacy**: References are masked as `Ref ••••3456` (or `Ref ••••` for references of 4 characters or fewer). Status values: `pendingVerification`, `verified`, `rejected`.
+- **Response 200**:
+  ```json
+  {
+    "submissions": [
+      {
+        "id": "uuid",
+        "periodMonth": "2026-11",
+        "amountPaisa": 70000,
+        "method": "esewa",
+        "referenceMasked": "Ref ••••2345",
+        "status": "pendingVerification",
+        "submittedAt": "2026-11-04T05:00:00.000Z",
+        "reviewedAt": null,
+        "rejectionReason": null
+      }
+    ]
+  }
+  ```
 
-#### `GET /v1/groups/:groupId/payments/pending`
+#### `GET /v1/groups/:groupId/payments/pending` (IMPLEMENTED)
 - **Replaces**: `PaymentsRepository.getPendingReviews`
-- **Auth**: Treasurer | **Derivation**: Read-only. Full unmasked references; `isOwnSubmission` flagged.
+- **Auth**: Treasurer | Non-treasurers receive 403 `forbidden`.
+- **Errors**: 403 `forbidden`, 404 `group_not_found`
+- **Privacy & Separation**: Full unmasked stored references; `isOwnSubmission: boolean` flagged for separation of duties.
+- **Response 200**:
+  ```json
+  {
+    "reviews": [
+      {
+        "submissionId": "uuid",
+        "memberId": "uuid",
+        "memberName": "Hari",
+        "periodMonth": "2026-11",
+        "amountPaisa": 70000,
+        "method": "esewa",
+        "reference": "KH778899",
+        "note": "November contribution",
+        "submittedAt": "2026-11-04T05:00:00.000Z",
+        "isOwnSubmission": false
+      }
+    ]
+  }
+  ```
 
-#### `POST /v1/groups/:groupId/payments/:submissionId/verify` & `.../reject`
-- **Replaces**: `PaymentsRepository.verifyPayment`, `rejectPayment`
-- **Auth**: Treasurer (separation of duties enforced) | **Idempotent**: Group-scoped (`Idempotency-Key`)
-- **Verify**: Posts immutable ledger entry via `postVerifiedEntry`.
-- **Reject**: `{ "reason": "referenceNotFound", "note": "..." }`. Allows member resubmission.
+#### `POST /v1/groups/:groupId/payments/:submissionId/verify` (IMPLEMENTED)
+- **Replaces**: `PaymentsRepository.verifyPayment`
+- **Auth**: Treasurer | **Idempotent**: Group-scoped (`Idempotency-Key` required)
+- **Errors**: 400 `idempotency_key_required`, 400 `invalid_idempotency_key`, 403 `forbidden`, 403 `cannot_review_own_payment`, 404 `group_not_found`, 404 `submission_not_found`, 409 `already_reviewed`, 409 `idempotency_conflict`
+- **Separation of Duties**: A sole treasurer can verify their own submission; if 2+ active treasurers exist, self-verification returns 403 `cannot_review_own_payment`.
+- **Post**: Atomically sets submission status to `verified`, posts exactly one immutable ledger entry (`postVerifiedEntry`), creates an audit log entry, and updates the unified activity feed.
+- **Response 200**: `{ "submission": { ... }, "ledgerEntry": { ... } }`
+
+#### `POST /v1/groups/:groupId/payments/:submissionId/reject` (IMPLEMENTED)
+- **Replaces**: `PaymentsRepository.rejectPayment`
+- **Auth**: Treasurer | **Idempotent**: Group-scoped (`Idempotency-Key` required)
+- **Request**:
+  ```json
+  {
+    "reason": "referenceNotFound",
+    "note": "Reference could not be found in eSewa statement"
+  }
+  ```
+- **Errors**: 400 `idempotency_key_required`, 400 `invalid_idempotency_key`, 400 `invalid_request`, 403 `forbidden`, 403 `cannot_review_own_payment`, 404 `group_not_found`, 404 `submission_not_found`, 409 `already_reviewed`, 409 `idempotency_conflict`
+- **Post**: Atomically sets submission status to `rejected`, records rejection reason/note, creates audit log entry, and clears the pending obligation so member can resubmit.
+- **Response 200**: `{ "submission": { ... } }`
 
 ---
 
 ### 2.4 Unified Activity & Transactions
-#### `GET /v1/groups/:groupId/transactions`
+#### `GET /v1/groups/:groupId/transactions` (IMPLEMENTED)
 - **Replaces**: `TransactionsRepository.getTransactions`
 - **Auth**: Active Member | **Derivation**: Unified Read Model (`v_activity_items`)
 - **Query Params**: `?cursor=<opaque>&limit=20` (sorted `occurred_at DESC, id DESC`).
+- **Errors**: 400 `invalid_cursor`, 404 `group_not_found`
 - **Response 200**:
   ```json
   {
@@ -223,21 +369,38 @@ Versioned HTTP REST API specification for Broke Travelers backend API.
   ```
   *Flutter Mapping*: Maps directly to `TransactionRecord`, retaining all existing fields.
 
-#### `GET /v1/groups/:groupId/transactions/:transactionId`
+#### `GET /v1/groups/:groupId/transactions/:transactionId` (IMPLEMENTED)
 - **Replaces**: `TransactionsRepository.getTransaction`
-- **Auth**: Active Member | **Response 200**: Single unified activity item.
+- **Auth**: Active Member | **Derivation**: Read-only
+- **Errors**: 404 `group_not_found`, 404 `transaction_not_found`
+- **Lookup**: Accepts compound IDs (`ledger:<uuid>` or `submission:<uuid>`) or bare UUIDs (checked first against ledger, then submissions).
+- **Response 200**: `{ "item": { ... } }`
 
-#### `POST /v1/groups/:groupId/transactions`
+#### `POST /v1/groups/:groupId/transactions` (IMPLEMENTED)
 - **Replaces**: `TransactionsRepository.recordTransaction`
-- **Auth**: Treasurer | **Idempotent**: Group-scoped (`Idempotency-Key`)
-- **Request**: `{ "kind": "expense", "amountPaisa": 50000, "occurredAt": "...", "title": "Dinner", "note": "...", "method": "cash" }`
-- **Constraint**: Only `interest` and `expense` allowed. Withdrawals must use Approvals.
+- **Auth**: Treasurer | **Idempotent**: Group-scoped (`Idempotency-Key` required)
+- **Request**:
+  ```json
+  {
+    "kind": "expense",
+    "amountPaisa": 50000,
+    "occurredAt": "2026-11-03T12:00:00.000Z",
+    "title": "Group Dinner",
+    "note": "Paid cash at restaurant",
+    "method": "cash"
+  }
+  ```
+- **Constraint**: Only `interest` and `expense` allowed directly. Withdrawals must use the multi-member Approvals lifecycle.
+- **Errors**: 400 `idempotency_key_required`, 400 `invalid_idempotency_key`, 400 `invalid_request`, 403 `forbidden`, 404 `group_not_found`, 409 `insufficient_balance`, 409 `idempotency_conflict`
+- **Response 201**: `{ "transaction": { ... } }`
 
-#### `POST /v1/groups/:groupId/transactions/:transactionId/reverse`
+#### `POST /v1/groups/:groupId/transactions/:transactionId/reverse` (IMPLEMENTED)
 - **Replaces**: `TransactionsRepository.reverseTransaction`
-- **Auth**: Treasurer | **Idempotent**: Group-scoped (`Idempotency-Key`)
+- **Auth**: Treasurer | **Idempotent**: Group-scoped (`Idempotency-Key` required)
 - **Request**: `{ "reason": "Incorrect billing amount" }`
-- **Constraint**: Only verified `interest` and `expense` can be reversed.
+- **Constraint**: Only verified `interest` and `expense` ledger entries can be reversed. Contributions must be handled via payment workflow, withdrawals via governance.
+- **Errors**: 400 `idempotency_key_required`, 400 `invalid_idempotency_key`, 400 `invalid_request`, 400 `transaction_not_reversible`, 403 `forbidden`, 404 `group_not_found`, 404 `transaction_not_found`, 409 `insufficient_balance`, 409 `transaction_already_reversed`, 409 `idempotency_conflict`
+- **Response 200**: `{ "transaction": { ... } }`
 
 ---
 

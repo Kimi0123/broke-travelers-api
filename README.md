@@ -12,8 +12,38 @@ Broke Travelers is an immutable financial ledger and group transparency recordke
 - **Testing**: Vitest with golden vectors ported from Dart, supertest integration suite
 
 ## Current Status
-**Phase 5.3 complete — HTTP Layer: Authentication, Session, Groups, Invitations, Members.**
-Express 5 REST API with Firebase ID token authentication (TokenVerifier port with Firebase adapter), user provisioning, groups CRUD, single-use invitations with brute-force lockout, member role management, and soft removal invariants. Verified across 218 unit/vector tests and 41 integration tests against real PostgreSQL.
+**Phase 5.4 complete — Financial Endpoints: Contributions, Payments, Transactions, Member Detail.**
+Express 5 REST API with Firebase ID token authentication, user session provisioning, groups CRUD, single-use invitations with brute-force lockout, member role management, contribution periods, payment submissions & reviews (with separation of duties and reference masking), transactions & reversals, keyset-paginated unified activity (`v_activity_items`), and detailed member history. Verified across 226 unit/vector tests (1 skipped) and 78 integration tests across 21 suites against real PostgreSQL.
+
+## Implemented Endpoints Reference
+
+| Endpoint | Method | Scope / Roles | Description |
+|---|---|---|---|
+| `/v1/health` | GET | Public | Service health & database connectivity check |
+| `/v1/session` | POST | Authenticated User | Idempotent user profile provisioning |
+| `/v1/profile` | GET | Authenticated User | Current user profile, active roles, and groups |
+| `/v1/groups` | POST | Authenticated User | Create group (assigns Owner + Treasurer) |
+| `/v1/groups/:id` | GET | Active Member | Group details, contribution amount, member count |
+| `/v1/groups/:id/settings` | PATCH | Group Owner | Update group name and due day settings |
+| `/v1/groups/:id/invitations` | POST | Group Owner | Issue 8-char single-use invite code (7-day expiry) |
+| `/v1/groups/:id/invitations` | GET | Group Owner | List group invitations with dynamic status |
+| `/v1/groups/:id/invitations/:invId` | DELETE | Group Owner | Revoke pending invitation |
+| `/v1/invitations/accept` | POST | Authenticated User | Accept invitation code (rate limited to 5 fails/5m) |
+| `/v1/groups/:id/members` | GET | Active Member | Active members list with derived obligation status |
+| `/v1/groups/:id/members/:memberId` | GET | Active Member | Member profile, totals, and monthly history |
+| `/v1/groups/:id/members/:memberId/role` | PATCH | Group Owner | Promote/demote treasurer role |
+| `/v1/groups/:id/members/:memberId` | DELETE | Group Owner | Soft removal enforcing strict invariant precedence |
+| `/v1/groups/:id/contributions/periods` | GET | Active Member | Period summaries from earliest entry to current anchor |
+| `/v1/groups/:id/contributions/periods/:periodId` | GET | Active Member | Period detail and member obligation breakdown |
+| `/v1/groups/:id/payments` | POST | Active Member | Submit payment with server-derived expected amount |
+| `/v1/groups/:id/payments/my` | GET | Active Member | Personal submissions with masked references |
+| `/v1/groups/:id/payments/pending` | GET | Treasurer | Pending review queue with unmasked references |
+| `/v1/groups/:id/payments/:subId/verify` | POST | Treasurer | Atomic verify, ledger post, and audit log write |
+| `/v1/groups/:id/payments/:subId/reject` | POST | Treasurer | Atomic reject with structured reason & note |
+| `/v1/groups/:id/transactions` | GET | Active Member | Unified activity feed with keyset pagination |
+| `/v1/groups/:id/transactions/:txId` | GET | Active Member | Single activity item lookup (ledger or submission) |
+| `/v1/groups/:id/transactions` | POST | Treasurer | Record direct expense or interest entry |
+| `/v1/groups/:id/transactions/:txId/reverse` | POST | Treasurer | Reverse expense/interest with balance guard |
 
 ## Run the API Locally
 
@@ -50,8 +80,8 @@ Express 5 REST API with Firebase ID token authentication (TokenVerifier port wit
 ## Testing & Quality
 
 ```bash
-npm run test:unit         # Unit & 135 Dart golden vector tests (218 tests)
-npm run test:integration  # Real PostgreSQL integration tests (41 tests across 14 suites)
+npm run test:unit         # Unit & 135 Dart golden vector tests (226 tests, 1 skipped)
+npm run test:integration  # Real PostgreSQL integration tests (78 tests across 21 suites)
 npm run lint              # ESLint check
 npm run format:check      # Prettier format check
 npm run typecheck         # TypeScript compiler check

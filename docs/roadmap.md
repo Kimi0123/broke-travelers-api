@@ -50,11 +50,23 @@ Ordered task breakdown for implementing the Broke Travelers backend API and comp
 
 ---
 
-### Task 5.4: Financial Operations: Contributions, Payments & Ledger Endpoints
-- **Goal**: Implement contribution period queries, member payment submissions, treasurer verification/rejection, direct transactions, and reversals with idempotency protection.
-- **Deliverables**: Endpoints for `/v1/groups/:id/contributions`, `/v1/groups/:id/payments`, `/v1/groups/:id/transactions`; idempotency middleware with 48h cache; reference normalization and method-scoped uniqueness checks.
-- **Acceptance Tests**: Replay of identical `Idempotency-Key` returns original response; conflicting key returns 409; payment verification creates ledger row (FIN-1); treasurer separation of duties enforced.
-- **Flutter Impact**: None.
+### Task 5.4: Financial Operations: Contributions, Payments & Ledger Endpoints — [DONE]
+- **Goal**: Implement contribution period queries, member payment submissions, treasurer verification/rejection, direct transactions, reversals, unified activity feed, and member detail with idempotency protection.
+- **Status**: **DONE** (Backend commits `e4b8e2f`, `eb67b2e`, `59e16e2`, `8d2a999`, `d43c77f`, `b601f8e`, `e50966f` on branch `main`).
+- **Deliverables**:
+  - Contribution period list and detail endpoints with dynamic obligation derivation (`GET /v1/groups/:id/contributions/periods`, `GET .../periods/:periodId`).
+  - Payment submission with server-derived expected amounts, method-scoped reference uniqueness, and validation against open/obligated periods (`POST /v1/groups/:id/payments`).
+  - Personal payment history (`GET /v1/groups/:id/payments/my`) with reference masking and status mapping (`pendingVerification`, `verified`, `rejected`).
+  - Pending reviews queue (`GET /v1/groups/:id/payments/pending`) with unmasked references and `isOwnSubmission` separation-of-duties indicator.
+  - Atomic payment verification (`POST .../verify`) posting immutable ledger entries (`postVerifiedEntry`), updating audit log, and feeding unified activity.
+  - Payment rejection (`POST .../reject`) recording structured reasons and freeing members for resubmission.
+  - Transactions & Reversals (`POST /v1/groups/:id/transactions`, `POST .../:transactionId/reverse`) supporting expense and interest entries, 366-day backdating guard, verified balance guard, and non-modifiable linked reversal entries.
+  - Unified activity read model (`GET /v1/groups/:id/transactions`, `GET .../:transactionId`) backed by `v_activity_items` with opaque base64url keyset pagination (`?cursor=...&limit=...`).
+  - Member detail endpoint (`GET /v1/groups/:id/members/:memberId`) returning profile, cumulative verified total, pending total, verified month count, and privacy-filtered monthly contribution history.
+  - Full Flutter end-to-end parity test suite validating matching financial outcomes between Flutter mocks and backend PostgreSQL.
+- **Acceptance Tests**: 226 unit tests (1 skipped); 78 integration tests across 21 suites passing against real PostgreSQL; verified across 3 consecutive runs with 0 flakiness.
+- **Flutter Impact**: None (backend standalone).
+- **Next Task**: Task 5.5 (Governance, Reports, Reconciliation & Updates Endpoints).
 
 ---
 
