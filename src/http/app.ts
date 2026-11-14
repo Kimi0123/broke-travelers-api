@@ -20,6 +20,7 @@ import { createPaymentsRouter } from './routes/payments.js';
 import { createProfileRouter } from './routes/profile.js';
 import { createReconciliationsRouter } from './routes/reconciliations.js';
 import { createReportsRouter } from './routes/reports.js';
+import { createUpdatesRouter } from './routes/updates.js';
 import { createSessionRouter } from './routes/session.js';
 import { createTransactionsRouter } from './routes/transactions.js';
 
@@ -198,6 +199,13 @@ export function createApp(deps: AppDependencies): Express {
     );
     app.use(
       createReportsRouter({
+        prisma: deps.prisma,
+        tokenVerifier: deps.tokenVerifier,
+        clock: deps.clock,
+      }),
+    );
+    app.use(
+      createUpdatesRouter({
         prisma: deps.prisma,
         tokenVerifier: deps.tokenVerifier,
         clock: deps.clock,
