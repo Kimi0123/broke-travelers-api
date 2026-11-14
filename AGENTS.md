@@ -30,7 +30,7 @@ Backend REST API for Broke Travelers (Node.js, Express, TypeScript, PostgreSQL, 
 - Authentication uses Firebase ID tokens verified server-side. Resolve the user from the Firebase UID. Never store or trust custom claims for group roles.
 - Authorization: every group-owned endpoint is scoped by `groupId` in the URL and validates active membership (`leftAt IS NULL`) server-side before execution.
 - Separation of duties: payment verification is restricted to Treasurers. A Treasurer cannot review their own payment when another active Treasurer exists.
-- Approvals: approval is not execution. Executing an approved expense/withdrawal requires a Treasurer and creates an immutable ledger entry.
+- Approvals: approval is not execution. Executing an approved expense/withdrawal requires a Treasurer and creates an immutable ledger entry. Execution of an approved request takes amount/title/payee only from the stored request; the client sends only paymentMethod (and reference where applicable). Approvals require at least 2 members on roster at creation.
 - Idempotency: every money-writing endpoint (`POST /v1/groups/:id/...`) requires an `Idempotency-Key` header to protect against double-submission and network retry races.
 - Privacy & leak prevention: errors must return safe, generic error envelopes. Never expose stack traces, database internals, credentials, or other members' payment references in logs or responses.
 - References: payment references are normalized for uniqueness and masked (`Ref ••••3456`) to non-privileged viewers. Never expose references in public feeds.

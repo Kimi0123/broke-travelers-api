@@ -242,8 +242,8 @@ Versioned HTTP REST API specification for Broke Travelers backend API.
     "note": "Nov fee"
   }
   ```
-- **Errors**: 400 `idempotency_key_required`, 400 `invalid_idempotency_key`, 400 `invalid_request`, 400 `not_obligated`, 400 `period_not_open`, 404 `group_not_found`, 409 `already_submitted`, 409 `duplicate_reference`, 409 `idempotency_conflict`
-- **Response 201**: Submission object. `amountPaisa` is derived server-side from group settings (client amounts are strictly rejected). Reference is normalized.
+- **Errors**: 400 `idempotency_key_required`, 400 `invalid_idempotency_key`, 400 `invalid_payment_input`, 400 `not_obligated`, 400 `period_not_open`, 404 `group_not_found`, 409 `already_submitted`, 409 `duplicate_reference`, 409 `idempotency_conflict`
+- **Response 201**: Submission object. `amountPaisa` is derived server-side from group settings (client amounts are strictly rejected). Reference is normalized and returned masked (`referenceMasked` as `ESW-***-12345` or `N/A`), preventing raw reference credential leaks.
 
 #### `GET /v1/groups/:groupId/payments/my` (IMPLEMENTED)
 - **Replaces**: `PaymentsRepository.getMyPayments`
@@ -373,7 +373,9 @@ Versioned HTTP REST API specification for Broke Travelers backend API.
 - **Replaces**: `TransactionsRepository.getTransaction`
 - **Auth**: Active Member | **Derivation**: Read-only
 - **Errors**: 404 `group_not_found`, 404 `transaction_not_found`
-- **Lookup**: Accepts compound IDs (`ledger:<uuid>` or `submission:<uuid>`) or bare UUIDs (checked first against ledger, then submissions).
+- **Lookup**: Accepts compound IDs only (`ledger:<uuid>` or `submission:<uuid>`). Bare UUIDs return 404 `transaction_not_found`.
+- **Stale Submission Resolution**: A `submission:<uuid>` lookup for a payment submission that has been verified automatically resolves to and returns the resulting `ledger:<ledgerEntryId>` item.
+- **Visibility**: Rejected submissions are visible only to the submitting member or group treasurer/owner. Other active members querying a rejected submission receive 404 `transaction_not_found`.
 - **Response 200**: `{ "item": { ... } }`
 
 #### `POST /v1/groups/:groupId/transactions` (IMPLEMENTED)
@@ -404,38 +406,239 @@ Versioned HTTP REST API specification for Broke Travelers backend API.
 
 ---
 
-### 2.5 Approvals
-#### `GET /v1/groups/:groupId/approvals` & `GET .../:requestId`
-- **Replaces**: `ApprovalsRepository.getApprovals`, `getApproval`
-- **Auth**: Active Member | **Derivation**: Read-only. Returns voting tallies, quorum status, myVote.
+### 2.7 Approvals (IMPLEMENTED)
 
-#### `POST /v1/groups/:groupId/approvals`
+Multi-member approval governance workflow for expenses and withdrawals. Requires at least 2 active members on the roster.
+
+#### `POST /v1/groups/:groupId/approvals` (IMPLEMENTED)
 - **Replaces**: `ApprovalsRepository.createApproval`
-- **Auth**: Active Member | **Idempotent**: Group-scoped (`Idempotency-Key`)
-- **Request**: `{ "kind": "withdrawal", "amountPaisa": 100000, "title": "Tent", "payee": "Shop", "description": "..." }`
-- **Rule**: Requires >= 2 members; snap-shots eligible voters excluding requester.
+- **Auth**: Active Member | **Idempotent**: Group-scoped (`Idempotency-Key` required)
+- **Request**:
+  ```json
+  {
+    "kind": "withdrawal",
+    "amountPaisa": 100000,
+    "title": "Trekking Tent",
+    "payee": "Outdoor Gear Ltd",
+    "description": "2-person tent for Himalayan expedition"
+  }
+  ```
+- **Rules & Constraints**:
+  - `kind`: `withdrawal` or `expense` only.
+  - `amountPaisa`: Integer paisa (1 to 1,000,000,000). Must not exceed current verified group balance at request creation time (409 `insufficient_balance`).
+  - `title`: 1..60 characters, trimmed, printable characters only.
+  - `payee`: 1..60 characters, trimmed, printable characters only.
+  - `description`: Optional, max 500 characters, trimmed.
+  - Active roster must have at least 2 members (400 `not_enough_members`).
+  - Snapshots eligible voters: all active members at creation time excluding the requester.
+  - Quorum calculation: `votesNeeded = Math.ceil((activeMembers - 1) / 2)`.
+  - Initial status: `open`. Expires automatically after 7 calendar days at 23:59:59.999 NPT.
+- **Errors**: 400 `idempotency_key_required`, 400 `invalid_idempotency_key`, 400 `invalid_approval_input`, 400 `not_enough_members`, 404 `group_not_found`, 409 `insufficient_balance`, 409 `idempotency_conflict`
+- **Response 201**: `{ "approval": { ... } }`
 
-#### `POST /v1/groups/:groupId/approvals/:requestId/vote`
+#### `GET /v1/groups/:groupId/approvals` (IMPLEMENTED)
+- **Replaces**: `ApprovalsRepository.getApprovals`
+- **Auth**: Active Member | **Derivation**: Read-only
+- **Query Params**: `?status=open|approved|rejected|expired|cancelled|executed&kind=expense|withdrawal&cursor=<opaque>&limit=20` (sorted `createdAt DESC, id DESC`).
+- **Errors**: 400 `invalid_cursor`, 404 `group_not_found`
+- **Response 200**:
+  ```json
+  {
+    "approvals": [
+      {
+        "id": "uuid",
+        "groupId": "uuid",
+        "kind": "withdrawal",
+        "title": "Trekking Tent",
+        "amountPaisa": 100000,
+        "payee": "Outdoor Gear Ltd",
+        "description": "2-person tent for Himalayan expedition",
+        "status": "open",
+        "createdAt": "2026-11-01T10:00:00.000Z",
+        "expiresAt": "2026-11-08T18:14:59.999Z",
+        "createdByMemberId": "uuid",
+        "createdByName": "Member B",
+        "createdByEmail": "b@example.com",
+        "eligibleVoterCount": 5,
+        "votesNeeded": 3,
+        "approvedCount": 1,
+        "rejectedCount": 0,
+        "myVote": "approved",
+        "executedAt": null,
+        "executedByMemberId": null,
+        "postedLedgerEntryId": null
+      }
+    ],
+    "nextCursor": null,
+    "hasMore": false
+  }
+  ```
+
+#### `GET /v1/groups/:groupId/approvals/:requestId` (IMPLEMENTED)
+- **Replaces**: `ApprovalsRepository.getApproval`
+- **Auth**: Active Member | **Derivation**: Read-only
+- **Errors**: 404 `group_not_found`, 404 `approval_not_found`
+- **Response 200**:
+  ```json
+  {
+    "approval": {
+      "id": "uuid",
+      "groupId": "uuid",
+      "kind": "withdrawal",
+      "title": "Trekking Tent",
+      "amountPaisa": 100000,
+      "payee": "Outdoor Gear Ltd",
+      "description": "2-person tent for Himalayan expedition",
+      "status": "open",
+      "createdAt": "2026-11-01T10:00:00.000Z",
+      "expiresAt": "2026-11-08T18:14:59.999Z",
+      "createdByMemberId": "uuid",
+      "createdByName": "Member B",
+      "createdByEmail": "b@example.com",
+      "eligibleVoterCount": 5,
+      "votesNeeded": 3,
+      "approvedCount": 1,
+      "rejectedCount": 0,
+      "myVote": "approved",
+      "executedAt": null,
+      "executedByMemberId": null,
+      "postedLedgerEntryId": null,
+      "voters": [
+        {
+          "memberId": "uuid",
+          "memberName": "Ram",
+          "memberEmail": "ram@example.com",
+          "hasVoted": true,
+          "approved": true,
+          "votedAt": "2026-11-02T10:00:00.000Z"
+        }
+      ]
+    }
+  }
+  ```
+
+#### `POST /v1/groups/:groupId/approvals/:requestId/vote` (IMPLEMENTED)
 - **Replaces**: `ApprovalsRepository.vote`
-- **Auth**: Eligible Voter | **Request**: `{ "approve": true }`. Strict majority with early rejection.
+- **Auth**: Active Member in eligible voter snapshot
+- **Request**: `{ "approve": true }`
+- **Rules & Constraints**:
+  - Requester cannot vote on their own request (403 `cannot_vote_on_own_request`).
+  - Caller must be present in request's snapshotted eligible voter list (403 `not_eligible_to_vote`).
+  - A member can vote at most once; votes cannot be changed (409 `already_voted`).
+  - Request must be in `open` status (409 `approval_not_open`). Expired requests evaluate dynamically.
+  - Strict majority threshold: status transitions to `approved` immediately when `approvedCount >= votesNeeded`.
+  - Early rejection: status transitions to `rejected` immediately when `rejectedCount > eligibleVoterCount - votesNeeded`.
+- **Errors**: 400 `invalid_approval_input`, 403 `forbidden`, 403 `cannot_vote_on_own_request`, 403 `not_eligible_to_vote`, 404 `group_not_found`, 404 `approval_not_found`, 409 `approval_not_open`, 409 `already_voted`
+- **Response 200**: `{ "approval": { ... } }`
 
-#### `POST /v1/groups/:groupId/approvals/:requestId/cancel`
+#### `POST /v1/groups/:groupId/approvals/:requestId/cancel` (IMPLEMENTED)
 - **Replaces**: `ApprovalsRepository.cancelApproval`
-- **Auth**: Requester only | **Response 200**: Status = `cancelled`.
+- **Auth**: Request creator only (403 `forbidden` if attempted by any other member or treasurer)
+- **Request**: `{}`
+- **Rules & Constraints**:
+  - Request must currently be `open` (409 `approval_not_open`).
+  - Status transitions to `cancelled`. Audit log entry created.
+- **Errors**: 403 `forbidden`, 404 `group_not_found`, 404 `approval_not_found`, 409 `approval_not_open`
+- **Response 200**: `{ "approval": { ... } }`
 
-#### `POST /v1/groups/:groupId/approvals/:requestId/execute`
+#### `POST /v1/groups/:groupId/approvals/:requestId/execute` (IMPLEMENTED)
 - **Replaces**: `ApprovalsRepository.executeApproval`
-- **Auth**: Treasurer | **Idempotent**: Group-scoped (`Idempotency-Key`)
-- **Rule**: Re-checks verified balance; posts immutable ledger entry; requester cannot execute if another treasurer exists.
+- **Auth**: Treasurer | **Idempotent**: Group-scoped (`Idempotency-Key` required)
+- **Request**:
+  ```json
+  {
+    "paymentMethod": "cash",
+    "reference": null
+  }
+  ```
+- **Separation of Duties**:
+  - The request creator cannot execute their own approved request if another active treasurer exists on the group roster (403 `cannot_execute_own_request`).
+  - A sole treasurer is permitted to execute their own request.
+- **Execution Rules**:
+  - Request must be in `approved` status (409 `approval_not_approved` if open/rejected/expired/cancelled; 409 `approval_already_executed` if already executed).
+  - Current verified group balance must be >= `amountPaisa` (409 `insufficient_balance`).
+  - All financial payload attributes (`amountPaisa`, `title`, `payee`, `kind`, `memberId`) are strictly populated from the stored approval request. The client provides only `paymentMethod` and optional `reference`.
+  - Atomically: posts exactly 1 immutable ledger entry, updates approval request to `executed` with `postedLedgerEntryId` and `executedAt`, and writes audit log entries.
+- **Errors**: 400 `idempotency_key_required`, 400 `invalid_idempotency_key`, 400 `invalid_approval_input`, 403 `forbidden`, 403 `cannot_execute_own_request`, 404 `group_not_found`, 404 `approval_not_found`, 409 `approval_not_approved`, 409 `approval_already_executed`, 409 `insufficient_balance`, 409 `idempotency_conflict`
+- **Response 200**: `{ "approval": { ... }, "ledgerEntry": { ... } }`
 
 ---
 
-### 2.6 Dashboard, Reports, Reconciliations & Updates
+### 2.8 Bank Reconciliation (IMPLEMENTED)
+
+Provides formal monthly and periodic bank statement reconciliation against the immutable verified ledger.
+
+#### `GET /v1/groups/:groupId/reconciliations` (IMPLEMENTED)
+- **Replaces**: `ReconciliationRepository.getReconciliations`
+- **Auth**: Active Member | **Derivation**: Read-only
+- **Query Params**: `?cursor=<opaque>&limit=20` (sorted `statementDate DESC, id DESC`).
+- **Errors**: 400 `invalid_cursor`, 404 `group_not_found`
+- **Response 200**:
+  ```json
+  {
+    "reconciliations": [
+      {
+        "id": "uuid",
+        "groupId": "uuid",
+        "statementDate": "2026-10-31",
+        "bankBalancePaisa": 730000,
+        "recordedBalancePaisa": 730000,
+        "differencePaisa": 0,
+        "note": "October bank statement reconciled",
+        "reconciledByMemberId": "uuid",
+        "reconciledByName": "Aarav Owner",
+        "reconciledByEmail": "owner@example.com",
+        "createdAt": "2026-11-01T04:00:00.000Z"
+      }
+    ],
+    "nextCursor": null,
+    "hasMore": false
+  }
+  ```
+
+#### `GET /v1/groups/:groupId/reconciliations/recorded-balance` (IMPLEMENTED)
+- **Replaces**: `ReconciliationRepository.getRecordedBalance`
+- **Auth**: Active Member | **Derivation**: Read-only
+- **Query Params**: `?date=YYYY-MM-DD` (Required, valid calendar date).
+- **Rules & Constraints**:
+  - `date`: Must be valid `YYYY-MM-DD` and cannot be in the future in NPT wall clock (400 `invalid_statement_date`).
+  - Server evaluates cutoff at NPT statement date end-of-day: `statementDate 23:59:59.999 NPT` (converted to UTC timestamp boundary).
+  - Derived balance equals the sum of `signedPaisa` of all verified ledger entries posted on or before the cutoff timestamp.
+- **Errors**: 400 `invalid_statement_date`, 404 `group_not_found`
+- **Response 200**:
+  ```json
+  {
+    "statementDate": "2026-10-31",
+    "recordedBalancePaisa": 730000
+  }
+  ```
+
+#### `POST /v1/groups/:groupId/reconciliations` (IMPLEMENTED)
+- **Replaces**: `ReconciliationRepository.recordReconciliation`
+- **Auth**: Treasurer | **Idempotent**: Group-scoped (`Idempotency-Key` required)
+- **Request**:
+  ```json
+  {
+    "statementDate": "2026-10-31",
+    "bankBalancePaisa": 730000,
+    "note": "Statement matches passbook"
+  }
+  ```
+- **Rules & Constraints**:
+  - `statementDate`: `YYYY-MM-DD`, valid calendar date, NPT today or earlier (400 `invalid_statement_date`).
+  - Only one reconciliation can be recorded per `statementDate` for each group (409 `reconciliation_already_recorded`).
+  - `bankBalancePaisa`: Non-negative integer paisa (0 to 1,000,000,000).
+  - `recordedBalancePaisa` and `differencePaisa` (`bankBalancePaisa - recordedBalancePaisa`) are strictly computed server-side. Any client-sent values for these fields are rejected.
+  - Recording a reconciliation NEVER mutates, edits, or adjusts any ledger entries.
+  - An append-only audit log entry (`reconciliation.recorded`) is written with statement date and difference.
+- **Errors**: 400 `idempotency_key_required`, 400 `invalid_idempotency_key`, 400 `invalid_statement_date`, 400 `invalid_reconciliation_input`, 403 `forbidden`, 404 `group_not_found`, 409 `reconciliation_already_recorded`, 409 `idempotency_conflict`
+- **Response 201**: `{ "reconciliation": { ... } }`
+
+---
+
+### 2.9 Dashboard, Reports & Updates (Deferred to Task 5.6)
 - `GET /v1/groups/:groupId/dashboard`: Replaces `DashboardRepository.getDashboardSummary`.
 - `GET /v1/groups/:groupId/reports/*`: Replaces `ReportsRepository` (monthly, members, annual, outflow).
-- `GET /v1/groups/:groupId/reconciliations`: Replaces `ReconciliationRepository.getReconciliations`.
-- `GET /v1/groups/:groupId/reconciliations/recorded-balance?date=YYYY-MM-DD`: Replaces `getRecordedBalance`.
-- `POST /v1/groups/:groupId/reconciliations`: Replaces `recordReconciliation` (Treasurer only, date unique, idempotent).
 - `GET /v1/groups/:groupId/updates`: Replaces `UpdatesRepository.getUpdates` (Derived per viewer; references strictly omitted).
 - `POST /v1/groups/:groupId/updates/mark-read`: Replaces client-only read tracking.
 
@@ -493,5 +696,7 @@ Versioned HTTP REST API specification for Broke Travelers backend API.
 | `not_eligible_to_vote` | 403 | `lib/features/approvals/presentation/screens/approval_detail_screen.dart` | You are not eligible to vote on this request |
 | `cannot_vote_on_own_request`| 403 | `lib/features/approvals/presentation/screens/approval_detail_screen.dart` | You cannot vote on your own request |
 | `approval_already_executed`| 409 | `lib/features/approvals/presentation/screens/approval_detail_screen.dart` | This approval request has already been recorded |
+| `cannot_execute_own_request`| 403 | `lib/features/approvals/presentation/screens/approval_detail_screen.dart` | You cannot execute your own request when another treasurer exists |
+| `invalid_statement_date` | 400 | `lib/features/reports/presentation/screens/reconciliation_screen.dart` | Statement date is invalid or in the future |
 | `invalid_reconciliation_input`| 400 | `lib/features/reports/presentation/screens/reconciliation_screen.dart` | Please check the statement date and balance |
 | `reconciliation_already_recorded`| 409 | `lib/features/reports/presentation/screens/reconciliation_screen.dart` | A reconciliation has already been recorded for this statement date |

@@ -131,39 +131,42 @@ Every rule cites its source file and symbol in the Flutter codebase and indicate
 ---
 
 ## 6. Approvals Workflow
-1. **Eligible Voter Snapshot**: Voters are snapshotted at creation time from active roster members, strictly excluding the requester. Requires at least 2 active members.
+1. **Eligible Voter Snapshot**: Voters are snapshotted at creation time from active roster members (`leftAt == null`), strictly excluding the requester. Requires at least 2 active members (`notEnoughMembers` / 400 `not_enough_members`).
    - *Source*: `lib/features/approvals/data/repositories/mock_approvals_repository.dart: createApproval:242, 268`.
    - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
-2. **Approval Kinds**: Approvals apply only to `expense` and `withdrawal`. Initial amount cannot exceed verified balance at submission.
+2. **Approval Kinds & Initial Balance Check**: Approvals apply only to `expense` and `withdrawal`. Initial amount cannot exceed current verified balance at creation (`insufficientBalance` / 409 `insufficient_balance`). Max limit is 1,000,000,000 paisa (10M NPR).
    - *Source*: `lib/features/approvals/data/repositories/mock_approvals_repository.dart: createApproval:234, 248`.
    - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
-3. **Strict Majority Rule & Early Rejection**: Threshold is `eligible ~/ 2 + 1`. If approvals reach threshold -> `approved`. If remaining potential votes cannot reach threshold (`eligible - rejections < threshold`), request transitions immediately to `rejected`.
-   - *Source*: `lib/features/approvals/domain/approval_rules.dart: resolveOpenStatus:5`.
+3. **Strict Majority Quorum & Early Rejection**: Threshold is `votesNeeded = ceil((activeMembers - 1) / 2)`. If approvals reach `votesNeeded` -> status transitions immediately to `approved`. Early rejection rule: if `rejectedCount > eligibleCount - votesNeeded` (i.e. remaining potential votes cannot reach threshold even if all remaining voters approve), request transitions immediately to `rejected`.
+   - *Source*: `lib/features/approvals/domain/approval_rules.dart: resolveOpenStatus:5`, `approval_rules.dart: votesNeeded`.
    - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
-4. **Expiry and Cancellation**: Open requests expire after 7 days. Requester may cancel an open request at any time.
+4. **Expiry and Cancellation**: Open requests expire after 7 calendar days at 23:59:59.999 NPT. Dynamic status evaluates to `expired` if still open after expiry cutoff. Requester only may cancel an open request (403 `forbidden` for others); transitions to `cancelled`. Terminal states are `executed`, `cancelled`, `rejected`, and `expired`.
    - *Source*: `lib/features/approvals/data/repositories/mock_approvals_repository.dart: _status:82`, `cancelApproval:352`.
    - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
-5. **Approval is Not Execution**: An approved request does not move money or post to ledger. Only a Treasurer executes an approved request. The Treasurer cannot alter amount, payee, or title. Execution performs a live balance re-check before posting to the ledger.
+5. **Approval is Not Execution & Live Balance Guard**: An approved request does not move money or post to the ledger. Only a Treasurer executes an approved request. All financial fields (`amountPaisa`, `title`, `payee`, `kind`, `memberId`) are strictly populated from the stored approval request; the client provides only `paymentMethod` and optional `reference`. Execution performs a live verified balance re-check before posting to the ledger.
    - *Source*: `lib/features/approvals/data/repositories/mock_approvals_repository.dart: executeApproval:380-438`, `AGENTS.md:30`.
+   - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
+6. **Separation of Duties (Execution)**: If another active treasurer exists on the group roster, the requester cannot execute their own approved request (403 `cannot_execute_own_request`). A sole treasurer is permitted to execute their own request.
+   - *Source*: `lib/features/approvals/data/repositories/mock_approvals_repository.dart: executeApproval:397`.
    - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
 
 ---
 
 ## 7. Bank Reconciliation
-1. **Statement Date Constraints**: Statement date must be past or today (`<= now()`); future dates are rejected (`invalidInput`).
+1. **Statement Date Constraints**: Statement date must be in NPT wall clock (today or earlier: `<= now()`); future dates are strictly rejected (`invalid_statement_date` / 400). Format must be `YYYY-MM-DD`.
    - *Source*: `lib/features/reports/data/repositories/mock_reconciliation_repository.dart: recordReconciliation:118`.
    - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
-2. **Date Uniqueness**: Exactly one reconciliation record per group per statement date.
+2. **Date Uniqueness**: Exactly one reconciliation record per group per statement date (409 `reconciliation_already_recorded`).
    - *Source*: `lib/features/reports/data/repositories/mock_reconciliation_repository.dart: recordReconciliation:123`.
    - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
-3. **Recorded Balance As Of**: Recorded balance is computed as verified balance at end of statement day (`23:59:59.999999`).
+3. **Recorded Balance As Of (NPT End-of-Day Cutoff)**: Recorded balance is derived strictly server-side as the sum of `signedPaisa` of all verified ledger entries posted on or before `statementDate 23:59:59.999 NPT` (converted to UTC timestamp boundary).
    - *Source*: `lib/core/mock/ledger_math.dart: verifiedBalancePaisa(asOf: date)`.
    - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
-4. **Difference Semantics**: `difference = bankBalance - recordedBalance`. If positive, bank is higher; if negative, bank is lower.
+4. **Difference Semantics**: `difference = bankBalance - recordedBalance`. If positive, bank is higher; if negative, bank is lower. Any client-sent values for `recordedBalancePaisa` or `differencePaisa` are ignored/rejected.
    - *Source*: `mock_reconciliation_repository.dart:141`, `mock_updates_repository.dart:349`.
    - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
-5. **No Automatic Adjustments**: Reconciliations are purely informational records; they never alter ledger entries or balances.
-   - *Source*: `README.md:99`.
+5. **No Automatic Adjustments & Immutable Audit**: Reconciliations are purely informational records; they never alter ledger entries or balances. Recording a reconciliation creates an append-only audit log entry (`reconciliation.recorded`).
+   - *Source*: `README.md:99`, `mock_reconciliation_repository.dart:145`.
    - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
 
 ---
@@ -246,6 +249,8 @@ Every rule cites its source file and symbol in the Flutter codebase and indicate
 | `ApprovalException(notEligible)` | `lib/features/approvals/domain/approval_exception.dart` | 403 | `not_eligible_to_vote` | You are not eligible to vote on this request |
 | `ApprovalException(ownRequest)` | `lib/features/approvals/domain/approval_exception.dart` | 403 | `cannot_vote_on_own_request` | You cannot vote on your own request |
 | `ApprovalException(alreadyExecuted)` | `lib/features/approvals/domain/approval_exception.dart` | 409 | `approval_already_executed` | This approval request has already been recorded |
+| `ApprovalException(ownRequest)` | `lib/features/approvals/domain/approval_exception.dart` | 403 | `cannot_execute_own_request` | You cannot execute your own request when another treasurer exists |
+| `ReconciliationException(invalidInput)` | `lib/features/reports/domain/reconciliation.dart` | 400 | `invalid_statement_date` | Statement date is invalid or in the future |
 | `ReconciliationException(invalidInput)` | `lib/features/reports/domain/reconciliation.dart` | 400 | `invalid_reconciliation_input` | Statement date, balance, or note is invalid |
 | `ReconciliationException(alreadyRecorded)` | `lib/features/reports/domain/reconciliation.dart` | 409 | `reconciliation_already_recorded` | A reconciliation has already been recorded for this statement date |
 

@@ -12,8 +12,8 @@ Broke Travelers is an immutable financial ledger and group transparency recordke
 - **Testing**: Vitest with golden vectors ported from Dart, supertest integration suite
 
 ## Current Status
-**Phase 5.4 complete — Financial Endpoints: Contributions, Payments, Transactions, Member Detail.**
-Express 5 REST API with Firebase ID token authentication, user session provisioning, groups CRUD, single-use invitations with brute-force lockout, member role management, contribution periods, payment submissions & reviews (with separation of duties and reference masking), transactions & reversals, keyset-paginated unified activity (`v_activity_items`), and detailed member history. Verified across 226 unit/vector tests (1 skipped) and 78 integration tests across 21 suites against real PostgreSQL.
+**Phase 5.5 complete — 5.4 Cleanup, Governance Approvals & Bank Reconciliation Endpoints.**
+Express 5 REST API with Firebase ID token authentication, user session provisioning, groups CRUD, single-use invitations with brute-force lockout, member role management, contribution periods, payment submissions & reviews (with separation of duties and reference masking), transactions & reversals, keyset-paginated unified activity (`v_activity_items`), detailed member history, multi-member approval governance workflow (create, list, detail, vote with early rejection, cancel, and execute with separation of duties), and formal bank statement reconciliations at NPT calendar boundaries. Verified across 226 unit/vector tests (1 skipped) and 91 integration tests across 23 suites against real PostgreSQL.
 
 ## Implemented Endpoints Reference
 
@@ -35,15 +35,24 @@ Express 5 REST API with Firebase ID token authentication, user session provision
 | `/v1/groups/:id/members/:memberId` | DELETE | Group Owner | Soft removal enforcing strict invariant precedence |
 | `/v1/groups/:id/contributions/periods` | GET | Active Member | Period summaries from earliest entry to current anchor |
 | `/v1/groups/:id/contributions/periods/:periodId` | GET | Active Member | Period detail and member obligation breakdown |
-| `/v1/groups/:id/payments` | POST | Active Member | Submit payment with server-derived expected amount |
+| `/v1/groups/:id/payments` | POST | Active Member | Submit payment with server-derived expected amount & masked ref return |
 | `/v1/groups/:id/payments/my` | GET | Active Member | Personal submissions with masked references |
 | `/v1/groups/:id/payments/pending` | GET | Treasurer | Pending review queue with unmasked references |
 | `/v1/groups/:id/payments/:subId/verify` | POST | Treasurer | Atomic verify, ledger post, and audit log write |
 | `/v1/groups/:id/payments/:subId/reject` | POST | Treasurer | Atomic reject with structured reason & note |
 | `/v1/groups/:id/transactions` | GET | Active Member | Unified activity feed with keyset pagination |
-| `/v1/groups/:id/transactions/:txId` | GET | Active Member | Single activity item lookup (ledger or submission) |
+| `/v1/groups/:id/transactions/:txId` | GET | Active Member | Compound ID lookup (`ledger:<id>` or `submission:<id>`) |
 | `/v1/groups/:id/transactions` | POST | Treasurer | Record direct expense or interest entry |
 | `/v1/groups/:id/transactions/:txId/reverse` | POST | Treasurer | Reverse expense/interest with balance guard |
+| `/v1/groups/:id/approvals` | POST | Active Member | Create approval request with eligible voter snapshot (>= 2 members) |
+| `/v1/groups/:id/approvals` | GET | Active Member | List approvals with status/kind filters, keyset pagination, and myVote |
+| `/v1/groups/:id/approvals/:reqId` | GET | Active Member | Get approval request detail and voter breakdown |
+| `/v1/groups/:id/approvals/:reqId/vote` | POST | Eligible Voter | Cast vote with quorum threshold & early rejection |
+| `/v1/groups/:id/approvals/:reqId/cancel` | POST | Requester | Cancel open approval request |
+| `/v1/groups/:id/approvals/:reqId/execute` | POST | Treasurer | Execute approved request with separation of duties |
+| `/v1/groups/:id/reconciliations` | GET | Active Member | List bank reconciliation records |
+| `/v1/groups/:id/reconciliations/recorded-balance` | GET | Active Member | Query recorded balance at NPT statement date cutoff |
+| `/v1/groups/:id/reconciliations` | POST | Treasurer | Record bank statement reconciliation against ledger |
 
 ## Run the API Locally
 

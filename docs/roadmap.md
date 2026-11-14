@@ -70,15 +70,39 @@ Ordered task breakdown for implementing the Broke Travelers backend API and comp
 
 ---
 
-### Task 5.5: Governance, Reports, Reconciliation & Updates Endpoints
-- **Goal**: Implement multi-member approval lifecycle, aggregated financial reports, bank reconciliation logging, and per-viewer updates feed.
-- **Deliverables**: Endpoints for `/v1/groups/:id/approvals` (voting, quorum, execution), `/v1/groups/:id/reports/*` (monthly, member, annual, outflow), `/v1/groups/:id/reconciliations`, `/v1/groups/:id/updates` (with read-state tracking).
-- **Acceptance Tests**: Strict majority and early rejection voting thresholds verified; report range boundaries enforced; updates feed strictly omits sensitive references.
+### Task 5.5: 5.4 Cleanup, Governance Approvals & Bank Reconciliation Endpoints — [DONE]
+- **Goal**: Resolve 5.4 cleanup items (compound IDs, stale submission-to-ledger resolution, rejected submission visibility, masked references on submission creation), implement multi-member approval lifecycle (request, vote, cancel, execute with separation of duties), and provide formal bank statement reconciliation against the verified ledger.
+- **Status**: **DONE** (Backend commits `1f3a9d4`, `f4c1eb9`, `6d4015f`, `8482300`, `9c3b83d` on branch `main`).
+- **Deliverables**:
+  - 5.4 Cleanup: Compound transaction IDs only (`ledger:<uuid>`, `submission:<uuid>`; bare UUID returns 404); automatic resolution of verified `submission:<uuid>` to resulting `ledger:<ledgerEntryId>`; rejected submission privacy (visible only to submitter or treasurer/owner); masked reference returned on `POST /v1/groups/:groupId/payments` 201.
+  - Governance Approvals (`/v1/groups/:groupId/approvals`):
+    - Create approval request with active member check (>= 2 members), verified balance check at submission, and eligible voter snapshot excluding requester.
+    - List approvals with `status` and `kind` filters, keyset pagination, and per-caller `myVote` derivation.
+    - Approval detail with individual voter statuses.
+    - Voting endpoint with dynamic expiry check (7 calendar days at 23:59:59.999 NPT), strict majority threshold (`votesNeeded = ceil((activeMembers - 1) / 2)`), and early rejection when remaining potential votes cannot reach threshold.
+    - Cancel endpoint restricted to requester while open.
+    - Execution endpoint restricted to treasurers with separation of duties (requester cannot execute own request if another active treasurer exists), verified balance re-check, and atomic posting of immutable ledger entry.
+  - Bank Reconciliation (`/v1/groups/:groupId/reconciliations`):
+    - List reconciliations ordered by `statementDate DESC, id DESC`.
+    - Recorded balance derivation (`/recorded-balance?date=YYYY-MM-DD`) evaluating cutoff at NPT statement date end-of-day (`23:59:59.999 NPT`).
+    - Record reconciliation endpoint for treasurers with date uniqueness, server-side balance & difference calculation, and immutable audit logging.
+  - Integration and parity test suite mirroring Flutter `approvals_e2e_test.dart` and `reports_e2e_test.dart` scenarios.
+- **Deferred to Task 5.6**: Dashboard summary (`GET /v1/groups/:groupId/dashboard` / `summary`), aggregated reports (`GET /v1/groups/:groupId/reports/*` for monthly, members, annual, and outflow), and the per-viewer updates feed (`GET /v1/groups/:groupId/updates`, `POST .../mark-read`) are DEFERRED to Task 5.6.
+- **Acceptance Tests**: 226 unit tests (1 skipped); 91 integration tests across 23 suites passing against real PostgreSQL; verified across 3 consecutive runs with 0 flakiness.
+- **Flutter Impact**: None (backend standalone).
+- **Next Task**: Task 5.6 (Reports, Dashboard Summary & Updates Feed).
+
+---
+
+### Task 5.6: Reports, Dashboard Summary & Updates Feed
+- **Goal**: Implement aggregated financial reports (monthly, member-wise, annual, outflow), dashboard summary cards, and the per-viewer updates notification feed with read-state tracking.
+- **Deliverables**: Endpoints for `/v1/groups/:groupId/dashboard`, `/v1/groups/:groupId/reports/*`, `/v1/groups/:groupId/updates`, and `/v1/groups/:groupId/updates/mark-read`.
+- **Acceptance Tests**: Report date ranges validated against group history; cumulative month-boundary balances match Flutter report builders; updates feed strictly omits sensitive references and other members' pending amounts.
 - **Flutter Impact**: None.
 
 ---
 
-### Task 5.6: Staging Deployment, Automated Backups & End-to-End Verification
+### Task 5.7: Staging Deployment, Automated Backups & End-to-End Verification
 - **Goal**: Deploy backend service to staging (Render + Neon PostgreSQL), configure connection pooling and cold-start health checks, and configure automated GitHub Actions backups with restore drills.
 - **Deliverables**: Staging deployment config, `/v1/health` endpoint, `.github/workflows/backup.yml` running daily `pg_dump` pushing encrypted artifacts to owner S3/R2 storage, scripted local Docker restore test drill.
 - **Acceptance Tests**: Staging API passes automated integration tests; restore drill successfully recreates database and validates ledger checksums.
