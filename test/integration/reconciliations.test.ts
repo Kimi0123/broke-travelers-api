@@ -102,11 +102,12 @@ describe('Bank Reconciliations HTTP Integration & Flutter Parity', () => {
       expectedKeys.sort(),
     );
 
-    // Security leak check
+    // Security leak check: never expose credentials or Firebase UIDs
     const serialized = JSON.stringify(body);
     expect(serialized).not.toContain('email');
     expect(serialized).not.toContain('password');
-    expect(serialized).not.toContain('fb-');
+    expect(serialized).not.toContain(fixture.owner.user.firebaseUid);
+    expect(serialized).not.toContain(fixture.member1.user.firebaseUid);
 
     // Regular member CAN read reconciliations list -> 200
     const listRes = await request(app)
