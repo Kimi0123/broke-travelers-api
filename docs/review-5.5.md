@@ -58,3 +58,88 @@ No semantic disagreements between Flutter code and backend implementation. The i
 ## 7. Open Questions / Deferred Items
 
 - Dashboard summary (`GET /v1/groups/:groupId/dashboard` / `summary`), aggregated reports (`GET /v1/groups/:groupId/reports/*`), and per-viewer updates feed (`GET /v1/groups/:groupId/updates`) are deferred to Task 5.6.
+
+## 8. Coverage Table for Approvals and Reconciliation (Task 5.5b)
+
+> Added by Task 5.5b (commit `test: approvals coverage gaps` / `test: reconciliation coverage gaps`).
+
+### votesNeeded formula (correction from 5.4 review)
+
+Implemented in `src/domain/approval-rules.ts:26` as `(eligible - (eligible % 2)) / 2 + 1`,
+which is equivalent to `Math.floor(eligible / 2) + 1`, not `ceil((eligible-1)/2)`.
+Verified by HTTP table-driven test in `approvals-rules.test.ts`.
+
+| Eligible | votesNeeded | earlyRejectionAt |
+|---|---|---|
+| 2 | 2 | 1 |
+| 3 | 2 | 2 |
+| 4 | 3 | 2 |
+| 5 | 3 | 3 |
+| 6 | 4 | 3 |
+| 7 | 4 | 4 |
+| 8 | 5 | 4 |
+
+### 8a. Approvals Coverage (test/integration/approvals-rules.test.ts)
+
+> Note: 404 uniformity checks use `.error.code` and `.error.message` individually (not `toEqual` on
+> the full body) because responses include a dynamic `requestId` field.
+
+| Requirement | Test Name | Notes |
+|---|---|---|
+| votesNeeded and early rejection (table: eligible 2..8) | `1. votesNeeded and early rejection table-driven (eligible 2..8)` | 7 sub-cases |
+| Approve exactly `votesNeeded - 1` → still open; one more → approved | Same test, inner assertions | Per eligible count |
+| Minimum rejections for impossible approval → rejected (early) | Same test, inner assertions | Per eligible count |
+| One fewer rejection → still open | Same test, inner assertions | Per eligible count |
+| Second vote same voter, new idempotency key → 409 `already_voted` | `validates idempotency keys and respects actor scoping` | Covers idempotency+vote rules |
+| Same voter replaying SAME key → stored response + `Idempotent-Replay: true` | Same test | |
+| Same key, different vote body → 409 `idempotency_conflict` | Same test | |
+| Missing idempotency key → 400 `idempotency_key_required` | Same test | |
+| Malformed key → 400 `invalid_idempotency_key` | Same test | |
+| Actor scoping: same key string from two actors does not collide | Same test | |
+| Cancel: only requester may cancel while open | `enforces execution role gates, rejects client financial fields, and re-checks live balance` | |
+| Cancel: non-requester gets 403 | Same test | |
+| Execute: only treasurer (not self when other treasurer exists) | Same test | |
+| Execute rejects client-sent financial fields | Same test | |
+| Execute re-checks live balance against recorded balance | Same test | |
+| Dual treasurers executing the same approved request at once → exactly one succeeds | `6a. dual treasurers executing the same approved request at once` | |
+| Concurrent deciding votes → consistent final status and exactly one `approval.decided` audit row | `6b. concurrent deciding votes…` | |
+| 5 concurrent identical execute requests with same idempotency key → one success | `6c. 5 concurrent identical execute requests with the SAME idempotency key` | |
+| Expiry at exact 7-day NPT boundary (1s before/after) | `7. flips status at exact 7-day NPT boundary…` | |
+| Approved request is immune to expiry | Same test | |
+| Exact keys on list (`items`, `hasMore`, `nextCursor`) and detail | `8. exact keys on list/detail, credential exposure prevention, 404 uniformity` | |
+| Credential exposure prevention (no email/firebaseUid) | Same test | |
+| 404 uniformity (non-member / cross-group) | Same test | Checks `.error.code` + `.error.message` |
+
+### 8b. Reconciliation Coverage (test/integration/reconciliations-rules.test.ts)
+
+| Requirement | Test Name | Notes |
+|---|---|---|
+| Missing Idempotency-Key → 400 `idempotency_key_required` | `1. validates idempotency key (missing/malformed)…` | |
+| Malformed key → 400 `invalid_idempotency_key` | Same test | |
+| Replay same key + same body → 201 + `Idempotent-Replay: true` | Same test | |
+| Conflict: same key + different body → 409 `idempotency_conflict` | Same test | |
+| Actor scoping: same key string from two treasurers creates two DB rows | `1b. actor scoping…` | |
+| Concurrent duplicate statement date → exactly 1×201, 4×409 `reconciliation_already_recorded` | `2. concurrent duplicate statement date…` | |
+| Exactly 1 DB row and 1 audit row after concurrent conflict | Same test | |
+| Bank higher → positive `differencePaisa`, status `mismatch` | `3. difference sign…` | |
+| Bank lower → negative `differencePaisa`, status `mismatch` | Same test | |
+| Bank equal → `differencePaisa` = 0, status `matched` | Same test | |
+| `bankBalancePaisa` = 0 → 201 (accepted) | `4. bankBalancePaisa: 0 accepted…` | |
+| `bankBalancePaisa` negative → 400 `invalid_reconciliation_input` | Same test | |
+| `bankBalancePaisa` above ceiling (> 1,000,000,000) → 400 | Same test | |
+| `bankBalancePaisa` non-integer (float) → 400 | Same test | |
+| Note 200 chars → 201 (accepted) | `5. note: 200-char note accepted, 201-char note rejected` | |
+| Note 201 chars → 400 `invalid_reconciliation_input` | Same test | |
+| Statement date = today in NPT (23:59:59 NPT) → 201 | `6. statement date = today in NPT accepted…` | |
+| Statement date = tomorrow in NPT → 400 `invalid_statement_date` | Same test | |
+| Exact NPT midnight boundary (00:00:00 NPT Nov 10 → Nov 10 is today) | Same test | |
+| Client-sent `recordedBalancePaisa` rejected | `7. client-sent computed fields are rejected…` | |
+| Client-sent `differencePaisa` rejected | Same test | |
+| Client-sent `status` rejected | Same test | |
+| `GET recorded-balance`: any active member can call (not just treasurer) | `8. recorded-balance: readable by any member…` | |
+| Returns 0 before any ledger entries | Same test | |
+| Returns correct balance after contribution entry | Same test | |
+| Returns 0 after reversal (interest+reversesEntryId) of contribution | Same test | |
+| Reconciliation POST does not alter ledger or submission counts | `9. reconciliation POST does not alter ledger or submission rows` | |
+| List ordered by newest statement date first | `10. list ordered by newest statement date first…` | |
+| List includes `recordedByName` but NOT `email`/`firebaseUid` | Same test | Checks `@example.com` and `firebaseUid` as keys |
