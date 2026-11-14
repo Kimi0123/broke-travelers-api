@@ -2,6 +2,7 @@ services:
   - type: web
     name: broke-travelers-api
     runtime: node
+    autoDeploy: false
     # Preferred Region: Singapore (singapore) or Mumbai (ap-south-1) for lowest latency to Nepal
     region: singapore
     plan: free
@@ -10,6 +11,8 @@ services:
     startCommand: npm run start:prod
     healthCheckPath: /v1/health/ready
     envVars:
+      - key: NODE_VERSION
+        value: '22'
       - key: NODE_ENV
         value: production
       - key: PORT
