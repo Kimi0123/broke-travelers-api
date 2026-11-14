@@ -23,8 +23,8 @@ services:
       - key: FIREBASE_SERVICE_ACCOUNT_JSON
         sync: false
       - key: TRUST_PROXY_HOPS
-        value: "1"
+        value: '1'
       - key: REQUIRE_VERIFIED_EMAIL
-        value: "true"
+        value: 'true'
       - key: LOG_LEVEL
         value: info
