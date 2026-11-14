@@ -10,6 +10,7 @@
     "postinstall": "prisma generate",
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
+    "start:prod": "node dist/server.js",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
@@ -33,7 +34,6 @@
     "@types/pg": "8.11.11",
     "@types/supertest": "^7.2.1",
     "@types/uuid": "^10.0.0",
-    "dotenv": "^18.0.10",
     "eslint": "^10.14.0",
     "eslint-config-prettier": "^10.1.8",
     "pino-pretty": "^13.2.0",
@@ -48,6 +48,7 @@
   "dependencies": {
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "^7.10.1",
+    "dotenv": "^18.0.10",
     "express": "^5.3.0",
     "express-rate-limit": "^8.7.4",
     "firebase-admin": "^14.5.0",

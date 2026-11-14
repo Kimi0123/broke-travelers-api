@@ -1,5 +1,13 @@
-import 'dotenv/config';
-import { pino } from 'pino';
+if (process.env['NODE_ENV'] !== 'production') {
+  try {
+    await import('dotenv/config');
+  } catch {
+    // In production or when .env is not present, environment variables are provided by the platform
+  }
+}
+
+import { pino, type Logger } from 'pino';
+import type { PrismaClient } from '@prisma/client';
 import type { TokenVerifier } from './application/ports/token-verifier.js';
 import { loadConfig } from './config/env.js';
 import { createApp } from './http/app.js';
@@ -27,6 +35,44 @@ const app = createApp({
   logger,
   tokenVerifier,
 });
+
+/**
+ * On boot in production, verify connectivity to the database with exponential backoff.
+ * Logs ONLY attempt counts (never connection strings, secrets, or credentials).
+ */
+async function waitForDatabase(
+  client: PrismaClient,
+  log: Logger,
+  maxAttempts = 5,
+): Promise<void> {
+  let attempt = 1;
+  let delayMs = 1000;
+  while (attempt <= maxAttempts) {
+    try {
+      log.info({ attempt, maxAttempts }, 'Checking database connectivity...');
+      await client.$queryRaw`SELECT 1`;
+      log.info('Database connectivity established');
+      return;
+    } catch {
+      log.warn(
+        { attempt, maxAttempts },
+        'Database connectivity check failed, retrying...',
+      );
+      if (attempt === maxAttempts) {
+        throw new Error(
+          `Failed to connect to database after ${maxAttempts} attempts`,
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      delayMs = Math.min(delayMs * 2, 8000);
+      attempt++;
+    }
+  }
+}
+
+if (config.NODE_ENV === 'production') {
+  await waitForDatabase(prisma, logger);
+}
 
 const server = app.listen(config.PORT, () => {
   logger.info({ port: config.PORT, env: config.NODE_ENV }, 'Server started');

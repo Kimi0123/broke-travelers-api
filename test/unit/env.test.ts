@@ -55,30 +55,98 @@ describe('loadConfig', () => {
     }
   });
 
-  it('requires Firebase variables in production', () => {
-    const prodEnvWithoutFirebase = {
+  it('requires Firebase, TRUST_PROXY_HOPS, and LOG_LEVEL variables in production', () => {
+    const prodEnvWithoutVars = {
       ...baseValidEnv,
       NODE_ENV: 'production',
     };
 
-    expect(() => loadConfig(prodEnvWithoutFirebase)).toThrowError(
-      /FIREBASE_PROJECT_ID/,
-    );
-    expect(() => loadConfig(prodEnvWithoutFirebase)).toThrowError(
-      /FIREBASE_SERVICE_ACCOUNT_JSON/,
-    );
+    try {
+      loadConfig(prodEnvWithoutVars);
+      expect.fail('Should have thrown an error');
+    } catch (err: unknown) {
+      const message = (err as Error).message;
+      expect(message).toContain('FIREBASE_PROJECT_ID');
+      expect(message).toContain('FIREBASE_SERVICE_ACCOUNT_JSON');
+      expect(message).toContain('TRUST_PROXY_HOPS');
+      expect(message).toContain('LOG_LEVEL');
+    }
   });
 
-  it('succeeds in production when Firebase variables are provided', () => {
-    const prodEnvWithFirebase = {
+  it('succeeds in production when all required variables are provided with raw JSON', () => {
+    const prodEnvValid = {
       ...baseValidEnv,
       NODE_ENV: 'production',
       FIREBASE_PROJECT_ID: 'broke-travelers-prod',
       FIREBASE_SERVICE_ACCOUNT_JSON: '{"project_id":"broke-travelers-prod"}',
+      TRUST_PROXY_HOPS: '1',
+      LOG_LEVEL: 'info',
     };
 
-    const config = loadConfig(prodEnvWithFirebase);
+    const config = loadConfig(prodEnvValid);
     expect(config.NODE_ENV).toBe('production');
     expect(config.FIREBASE_PROJECT_ID).toBe('broke-travelers-prod');
+    expect(config.FIREBASE_SERVICE_ACCOUNT_JSON).toBe(
+      '{"project_id":"broke-travelers-prod"}',
+    );
+    expect(config.TRUST_PROXY_HOPS).toBe(1);
+    expect(config.LOG_LEVEL).toBe('info');
+  });
+
+  it('succeeds in production when FIREBASE_SERVICE_ACCOUNT_JSON is base64 encoded JSON', () => {
+    const rawJson =
+      '{"project_id":"broke-travelers-prod","client_email":"test@prod.iam.gserviceaccount.com"}';
+    const base64Json = Buffer.from(rawJson).toString('base64');
+
+    const prodEnvBase64 = {
+      ...baseValidEnv,
+      NODE_ENV: 'production',
+      FIREBASE_PROJECT_ID: 'broke-travelers-prod',
+      FIREBASE_SERVICE_ACCOUNT_JSON: base64Json,
+      TRUST_PROXY_HOPS: '2',
+      LOG_LEVEL: 'warn',
+    };
+
+    const config = loadConfig(prodEnvBase64);
+    expect(config.NODE_ENV).toBe('production');
+    expect(config.FIREBASE_SERVICE_ACCOUNT_JSON).toBe(rawJson);
+    expect(config.TRUST_PROXY_HOPS).toBe(2);
+    expect(config.LOG_LEVEL).toBe('warn');
+  });
+
+  it('rejects placeholder values and empty strings without leaking values', () => {
+    const placeholders = ['changeme', 'placeholder', 'secret', 'xxx', '   '];
+    for (const placeholder of placeholders) {
+      const badEnv = {
+        ...baseValidEnv,
+        DATABASE_URL: placeholder,
+      };
+
+      try {
+        loadConfig(badEnv);
+        expect.fail(`Should have rejected placeholder: "${placeholder}"`);
+      } catch (err: unknown) {
+        const message = (err as Error).message;
+        expect(message).toContain('DATABASE_URL');
+        if (placeholder.trim().length > 0) {
+          expect(message).not.toContain(placeholder.trim());
+        }
+      }
+    }
+  });
+
+  it('rejects invalid JSON in FIREBASE_SERVICE_ACCOUNT_JSON', () => {
+    const badJsonEnv = {
+      ...baseValidEnv,
+      NODE_ENV: 'production',
+      FIREBASE_PROJECT_ID: 'broke-travelers-prod',
+      FIREBASE_SERVICE_ACCOUNT_JSON: 'not-a-valid-json-string',
+      TRUST_PROXY_HOPS: '1',
+      LOG_LEVEL: 'info',
+    };
+
+    expect(() => loadConfig(badJsonEnv)).toThrowError(
+      /FIREBASE_SERVICE_ACCOUNT_JSON/,
+    );
   });
 });

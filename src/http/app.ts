@@ -1,5 +1,6 @@
 import type { IncomingMessage } from 'node:http';
 import express, { type Express, type Request } from 'express';
+import { rateLimit } from 'express-rate-limit';
 import helmet from 'helmet';
 import { pino } from 'pino';
 import { pinoHttp } from 'pino-http';
@@ -82,8 +83,22 @@ export function createApp(deps: AppDependencies): Express {
   // Body parser with 100kb limit
   app.use(express.json({ limit: '100kb' }));
 
-  // Public health check endpoint
-  app.get('/v1/health', async (_req, res) => {
+  // Dedicated rate limiter for /v1/health/ready (generous limit: 120 req/min)
+  const readyLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 120,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    skip: () => deps.config.NODE_ENV === 'test',
+  });
+
+  // Shallow liveness check (200 { status: 'ok' })
+  app.get('/v1/health', (_req, res) => {
+    res.status(200).json({ status: 'ok' });
+  });
+
+  // Deep readiness check verifying DB connectivity via Prisma $queryRaw`SELECT 1`
+  app.get('/v1/health/ready', readyLimiter, async (_req, res) => {
     try {
       const timeoutPromise = new Promise<never>((_, reject) => {
         const timer = setTimeout(
@@ -95,17 +110,9 @@ export function createApp(deps: AppDependencies): Express {
 
       await Promise.race([deps.prisma.$queryRaw`SELECT 1`, timeoutPromise]);
 
-      const now = deps.clock ? deps.clock() : new Date();
-      res.status(200).json({
-        status: 'ok',
-        db: 'connected',
-        time: now.toISOString(),
-      });
+      res.status(200).json({ status: 'ready' });
     } catch {
-      res.status(503).json({
-        status: 'degraded',
-        db: 'unreachable',
-      });
+      res.status(503).json({ status: 'unready' });
     }
   });
 

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import request from 'supertest';
 import { afterAll, describe, expect, it } from 'vitest';
 import { pino } from 'pino';
@@ -22,24 +21,7 @@ describe('GET /v1/health Integration', () => {
     await closeAllTestClients();
   });
 
-  it('returns 200 ok when database is reachable', async () => {
-    const app = createApp({
-      prisma,
-      config: testConfig,
-      logger: pino({ level: 'silent' }),
-    });
-
-    const res = await request(app).get('/v1/health');
-
-    expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({
-      status: 'ok',
-      db: 'connected',
-      time: expect.any(String),
-    });
-  });
-
-  it('returns 503 degraded when database query fails or times out', async () => {
+  it('returns 200 ok for shallow liveness check on /v1/health', async () => {
     const failingPrisma = {
       $queryRaw: () => Promise.reject(new Error('Connection refused')),
     } as unknown as PrismaClient;
@@ -52,10 +34,43 @@ describe('GET /v1/health Integration', () => {
 
     const res = await request(app).get('/v1/health');
 
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      status: 'ok',
+    });
+  });
+
+  it('returns 200 ready on /v1/health/ready when database is reachable', async () => {
+    const app = createApp({
+      prisma,
+      config: testConfig,
+      logger: pino({ level: 'silent' }),
+    });
+
+    const res = await request(app).get('/v1/health/ready');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      status: 'ready',
+    });
+  });
+
+  it('returns 503 unready on /v1/health/ready when database query fails or times out', async () => {
+    const failingPrisma = {
+      $queryRaw: () => Promise.reject(new Error('Connection refused')),
+    } as unknown as PrismaClient;
+
+    const app = createApp({
+      prisma: failingPrisma,
+      config: testConfig,
+      logger: pino({ level: 'silent' }),
+    });
+
+    const res = await request(app).get('/v1/health/ready');
+
     expect(res.status).toBe(503);
     expect(res.body).toEqual({
-      status: 'degraded',
-      db: 'unreachable',
+      status: 'unready',
     });
   });
 });
