@@ -44,4 +44,10 @@ Thumbs.db
 logs/
 *.log
 
+# Database Dumps and Backups
+*.dump
+*.sql.gz
+*.age
+*.gpg
+
 /generated/prisma

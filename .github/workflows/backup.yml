@@ -1,0 +1,53 @@
+name: Database Backup
+
+on:
+  schedule:
+    # 02:30 NPT (UTC+5:45) corresponds to 20:45 UTC
+    - cron: '45 20 * * *'
+  workflow_dispatch:
+
+jobs:
+  backup:
+    name: Backup and Encrypt Database
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y postgresql-client
+
+      - name: Dump database
+        env:
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          if [ -z "$BACKUP_DATABASE_URL" ]; then
+            echo "::error::BACKUP_DATABASE_URL secret is not configured"
+            exit 1
+          fi
+          # Custom compressed archive format (-Fc)
+          pg_dump -Fc --no-owner --no-privileges "$BACKUP_DATABASE_URL" -f backup.dump
+          echo "Database dump completed successfully."
+
+      - name: Encrypt backup artifact
+        env:
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+        run: |
+          if [ -z "$BACKUP_ENCRYPTION_KEY" ]; then
+            echo "::error::BACKUP_ENCRYPTION_KEY secret is not configured"
+            exit 1
+          fi
+          # Symmetric AES256 encryption via GPG
+          gpg --symmetric --batch --yes --passphrase "$BACKUP_ENCRYPTION_KEY" --cipher-algo AES256 -o backup.dump.gpg backup.dump
+          rm -f backup.dump
+          echo "Backup encrypted successfully as backup.dump.gpg."
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ github.run_id }}
+          path: backup.dump.gpg
+          retention-days: 30
+          if-no-files-found: error
