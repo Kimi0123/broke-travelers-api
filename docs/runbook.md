@@ -48,8 +48,10 @@ without ever revealing usernames or passwords:
 
 ```powershell
 # Set production URLs in your current PowerShell session:
-$env:DIRECT_URL   = "postgresql://neondb_owner:password@ep-sample-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
-$env:DATABASE_URL = "postgresql://api_user:password@ep-sample-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
+# Note: DIRECT_URL uses the direct (non-pooler) host; DATABASE_URL uses the pooled host.
+# Always use sslmode=verify-full to avoid pg driver deprecation warnings.
+$env:DIRECT_URL   = "postgresql://neondb_owner:password@ep-sample.ap-southeast-1.aws.neon.tech/neondb?sslmode=verify-full"
+$env:DATABASE_URL = "postgresql://api_user:password@ep-sample-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=verify-full"
 
 # Verify targets before executing any database command:
 .\scripts\show-db-target.ps1
@@ -60,50 +62,98 @@ Confirm that the output indicates `Targets REMOTE / MANAGED database` and that t
 
 ---
 
-## 3. Database Role Setup and Verification
+## 3. Managed Database Bootstrap, Migrations, and Least-Privilege Role Setup
 
-Managed databases require two roles:
-1. **Database Owner (`neondb_owner` / `migration_owner`)**: Has DDL privileges, owns all tables, and executes migrations.
-2. **Application User (`api_user`)**: Least-privilege runtime role used by the running web service.
+When provisioning a managed PostgreSQL database (e.g. Neon), the execution order is critical:
+The initial migration grants privileges to `api_user`, so **`api_user` must exist before migrations are deployed**.
+
+The exact execution sequence is:
+1. **Set Session Variables**: Set `$env:DIRECT_URL` (direct host) and `$env:API_USER_PASSWORD` in your active session.
+2. **Bootstrap Database (`npm run db:bootstrap`)**: Creates the `api_user` role and grants `CONNECT` on the database.
+3. **Deploy Migrations (`npm run db:deploy`)**: Runs Prisma migrations using `DIRECT_URL`, creating application tables and initial grants.
+4. **Apply Role Permissions & Append-Only Guarantees (`managed-db-roles.sql`)**: Configures default privileges, view grants, and revokes mutation on append-only tables.
+5. **Verify Role Constraints (`npm run db:verify-roles`)**: Validates that `api_user` cannot perform DDL or alter ledger history.
+
+### Step 1 — Session Environment Configuration
+
+Store the owner connection string and desired application password in session variables:
+
+```powershell
+# Set direct owner connection (using direct non-pooler host and sslmode=verify-full):
+$env:DIRECT_URL = "postgresql://neondb_owner:<owner_password>@ep-sample.ap-southeast-1.aws.neon.tech/neondb?sslmode=verify-full"
+
+# Set a strong, random password for the application user:
+$env:API_USER_PASSWORD = "<strong_random_password>"
+
+# Verify targets before executing:
+.\scripts\show-db-target.ps1
+```
+
+> [!NOTE]
+> **SSL Mode**: Always specify `sslmode=verify-full` on managed databases (e.g. Neon) to avoid pg driver SSL deprecation warnings and ensure strict TLS verification.
+> **Host Endpoints**: `DIRECT_URL` and `BACKUP_DATABASE_URL` **must** connect to the direct host (e.g. `ep-sample...`), never the connection pooler endpoint (`-pooler`). The runtime `DATABASE_URL` uses the `-pooler` endpoint.
+
+### Step 2 — Bootstrap the Database (`npm run db:bootstrap`)
+
+Execute the bootstrap script to create `api_user` and grant `CONNECT`:
+
+```powershell
+npm run db:bootstrap   # executes scripts/db-bootstrap.js
+```
+
+**Variant A — Using local `psql`:**
+```powershell
+psql "$env:DIRECT_URL" -v api_password="$env:API_USER_PASSWORD" -f scripts/sql/managed-db-bootstrap.sql
+```
+
+**Variant B — Using Docker (if `psql` is not installed on the Windows host):**
+```powershell
+docker run --rm -it -v "${PWD}\scripts:/scripts" postgres:17 psql "$env:DIRECT_URL" -v api_password="$env:API_USER_PASSWORD" -f /scripts/sql/managed-db-bootstrap.sql
+```
+
+The bootstrap step creates `api_user` with `LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT` and grants `CONNECT` on the database. It is idempotent (running it again safely updates the password).
+
+### Step 3 — Run Database Migrations (`npm run db:deploy`)
+
+Database migrations **must** connect using `DIRECT_URL` (the direct, non-pooled connection with owner privileges):
+
+```powershell
+npm run db:deploy   # executes: prisma migrate deploy
+```
+
+Prisma creates all schemas, tables, indices, triggers, and applies initial table grants to `api_user`. Migrations are forward-only and idempotent; already-applied migrations are safely skipped.
+
+### Step 4 — Apply Advanced Role Permissions & Append-Only Guarantees (`managed-db-roles.sql`)
+
+Once tables exist, configure default privileges, views, and ledger append-only immutability.
 
 > [!IMPORTANT]
 > `managed-db-roles.sql` **must** be executed using the **OWNER / DIRECT connection string** (`$env:DIRECT_URL`),
 > **never** with the `api_user` connection string (`DATABASE_URL`). An unprivileged user cannot grant
 > permissions or alter roles.
 
-### Step 1 — Create / Update `api_user`
-
-Store the desired password in a session variable to avoid recording secrets in PowerShell command history:
-
+**Variant A — Using local `psql`:**
 ```powershell
-# Generate a strong password and set it in the session variable
-$env:API_USER_PASSWORD = "<strong_random_password>"
-```
-
-**Variant A — Using local `psql` (if PostgreSQL client is installed on Windows):**
-```powershell
-# Pass $env:API_USER_PASSWORD to psql variable 'api_password' without extra quotes
 psql "$env:DIRECT_URL" -v api_password="$env:API_USER_PASSWORD" -f scripts/sql/managed-db-roles.sql
 ```
 
-**Variant B — Using Docker (if `psql` is not installed on the Windows host):**
+**Variant B — Using Docker:**
 ```powershell
 docker run --rm -it -v "${PWD}\scripts:/scripts" postgres:17 psql "$env:DIRECT_URL" -v api_password="$env:API_USER_PASSWORD" -f /scripts/sql/managed-db-roles.sql
 ```
 
 The script is idempotent and performs the following least-privilege setup:
-- Creates `api_user` with `NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT` if missing, or updates password if present.
-- Grants `CONNECT` on the current database and `USAGE` on schema `public`.
-- Strictly revokes `CREATE` on schema `public` from `api_user`.
-- Grants `SELECT, INSERT, UPDATE` on application tables.
+- Grants `USAGE` on schema `public` and strictly revokes `CREATE` on schema `public` from `api_user`.
+- Sets default privileges so future tables and sequences automatically grant `SELECT, INSERT, UPDATE` to `api_user`.
+- Grants `SELECT` on `v_activity_items`.
 - Enforces append-only security: strictly revokes `UPDATE, DELETE, TRUNCATE` on `ledger_entries` and `audit_log`.
 
-### Step 2 — Verify Role Constraints
+### Step 5 — Verify Role Constraints (`npm run db:verify-roles`)
 
 Set `DATABASE_URL` using the newly created `api_user` credentials and run the verification test:
 
 ```powershell
-$env:DATABASE_URL = "postgresql://api_user:<strong_random_password>@<neon-host>/neondb?sslmode=require"
+$env:DATABASE_URL = "postgresql://api_user:<strong_random_password>@ep-sample-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=verify-full"
 npm run db:verify-roles   # runs scripts/verify-roles.js
 ```
 
@@ -112,19 +162,54 @@ and is physically blocked by database permissions from modifying or truncating t
 
 ---
 
-## 4. Running Database Migrations
+## 4. Recovering from a Failed Migration ("Migration Failed Halfway")
 
-Database migrations **must** connect using `DIRECT_URL` (the direct, non-pooled connection with owner privileges):
+If a migration fails midway (for example, if `npm run db:deploy` was run before `api_user` existed, or if a DDL syntax or connection error occurred), Prisma marks the migration as failed in the `_prisma_migrations` tracking table. Subsequent runs of `prisma migrate deploy` will abort with an error indicating a failed migration.
+
+*(Note: These recovery procedures are documented operational patterns based on PostgreSQL and Prisma specifications; they are not executed against live Neon instances during local development).*
+
+### Detection
+A failed migration is detected by checking the `_prisma_migrations` table or running `prisma migrate status`:
+```powershell
+npx prisma migrate status
+```
+Or via SQL query on `$env:DIRECT_URL`:
+```sql
+SELECT migration_name, started_at, finished_at, rolled_back_at
+FROM _prisma_migrations
+WHERE finished_at IS NULL;
+```
+If a row has `finished_at IS NULL` and `rolled_back_at IS NULL`, the migration failed halfway, leaving partial tables or objects.
+
+### Scenario A — Brand-New Empty Database Recovery (DESTRUCTIVE)
+> [!CAUTION]
+> **DESTRUCTIVE OPERATION**: The following recovery procedure completely wipes all objects in schema `public`.
+> **NEVER** run this on a database containing production or historical user data. Use this ONLY on a brand-new, freshly provisioned database during initial setup.
+
+On a fresh database with no production data, the cleanest recovery is to reset schema `public` and restart from Step 2:
 
 ```powershell
-# Confirm target is remote
-.\scripts\show-db-target.ps1
-
-# Apply all pending migrations
-npm run db:deploy   # executes: prisma migrate deploy
+# Drop and recreate schema public using the owner connection:
+psql "$env:DIRECT_URL" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO neondb_owner; GRANT ALL ON SCHEMA public TO public;"
 ```
+*(Or in Docker: `docker run --rm postgres:17 psql "$env:DIRECT_URL" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO neondb_owner; GRANT ALL ON SCHEMA public TO public;"`)*
 
-Migrations are forward-only and idempotent; already-applied migrations are safely skipped.
+Then rerun the bootstrap sequence in order:
+1. `npm run db:bootstrap`
+2. `npm run db:deploy`
+3. Run `managed-db-roles.sql`
+4. `npm run db:verify-roles`
+
+### Scenario B — Database Containing Data (Non-Destructive)
+If the database already contains data:
+1. Identify the specific error in the migration output.
+2. Connect using `$env:DIRECT_URL` and manually revert or complete any partial DDL changes made by the failing migration step.
+3. Mark the migration as rolled back in Prisma's tracking table:
+   ```powershell
+   npx prisma migrate resolve --rolled-back "<migration_name>"
+   ```
+4. Fix the root cause (e.g. missing permissions, role, or conflicting object).
+5. Rerun `npm run db:deploy`.
 
 ---
 
@@ -134,11 +219,11 @@ The service is configured in `render.yaml` at the repository root. The build com
 
 1. Connect your GitHub repository to your Render account.
 2. Render detects `render.yaml` and provisions the web service in `singapore`.
-3. In the Render Dashboard under **Environment**, configure the secret variables (the remaining variables are provided by `render.yaml`):
-   - `DATABASE_URL`: The **pooled** connection URL using `api_user` (e.g. `postgresql://api_user:...@ep-...-pooler.../neondb?sslmode=require`).
+3. In the Render Dashboard under **Environment**, configure the required secret variables (Render needs only these three secrets; all other configuration is supplied by `render.yaml`):
+   - `DATABASE_URL`: The **pooled** connection URL using `api_user` with the `-pooler` host (e.g. `postgresql://api_user:...@ep-...-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=verify-full`).
    - `FIREBASE_PROJECT_ID`: Your Firebase project ID.
-   - `FIREBASE_SERVICE_ACCOUNT_JSON`: Your Firebase service account credentials JSON (raw JSON or base64-encoded).
-   *(Note: `DIRECT_URL` is intentionally omitted from Render as runtime traffic only uses `DATABASE_URL`; migrations run from the developer machine. `REQUIRE_VERIFIED_EMAIL` defaults to `'false'` in `render.yaml` for staging until the client implements an email-verification screen).*
+   - `FIREBASE_SERVICE_ACCOUNT_JSON`: Your Firebase service account credentials JSON (base64-encoded string recommended, or raw JSON).
+   *(Note: `DIRECT_URL` is intentionally omitted from Render as runtime traffic only uses `DATABASE_URL`; migrations run from the developer machine. `TRUST_PROXY_HOPS: '1'`, `REQUIRE_VERIFIED_EMAIL: 'false'` for staging, and `LOG_LEVEL: 'info'` are defined in `render.yaml`).*
 4. Deploy the service.
 5. Render performs health checks against `GET /v1/health/ready`. When this endpoint returns `200 { status: 'ready' }`, traffic is routed to the new deployment.
 
@@ -181,6 +266,15 @@ Automated backups run daily at **02:30 NPT** (20:45 UTC) via `.github/workflows/
 ### Manual Backup Trigger
 To trigger an immediate backup outside the daily schedule:
 GitHub → **Actions** → **Database Backup** → **Run workflow**.
+
+### Required GitHub Secrets for Backups
+Configure the following secrets in GitHub Repository Settings → **Secrets and variables** → **Actions**:
+1. `BACKUP_DATABASE_URL`: Direct (non-pooled) PostgreSQL connection string (e.g. `postgresql://neondb_owner:...@ep-sample.ap-southeast-1.aws.neon.tech/neondb?sslmode=verify-full`).
+   > [!WARNING]
+   > Do **not** use a connection pooler host (`-pooler`) for backups. `pg_dump` requires a direct connection to snapshot database state without transaction pooling timeouts or protocol limitations.
+2. `BACKUP_ENCRYPTION_KEY`: A strong, randomly generated symmetric passphrase used by GPG AES-256 to encrypt the dump archive.
+   > [!CRITICAL]
+   > **Keep a copy of `BACKUP_ENCRYPTION_KEY` outside the repository** (e.g. in your secure 1Password or Bitwarden team vault). If this key is lost, backup archives cannot be decrypted and data cannot be recovered in a disaster recovery scenario.
 
 ---
 
@@ -229,8 +323,9 @@ Remove-Item -Force production_restore.dump
 > Because backups are created with `--no-privileges` for environment portability,
 > database role permissions are **not** included in the dump archive.
 > **After any database restore, you MUST immediately re-run:**
-> 1. `managed-db-roles.sql` (Section 3, Step 1)
-> 2. `npm run db:verify-roles` (Section 3, Step 2)
+> 1. `npm run db:bootstrap` (Section 3, Step 2)
+> 2. `managed-db-roles.sql` (Section 3, Step 4)
+> 3. `npm run db:verify-roles` (Section 3, Step 5)
 >
 > Failing to re-run role setup will cause the API to fail with permission denied errors.
 

@@ -189,14 +189,22 @@ docker build -t broke-travelers-api .
 docker run --rm -e NODE_ENV=production broke-travelers-api  # exits with missing-var message
 ```
 
-### Database Roles
+### Database Provisioning & Roles
+
+Managed PostgreSQL databases (e.g. Neon) require `api_user` to exist prior to migrations:
 
 ```powershell
-# Create / update runtime role (idempotent)
+# 1. Bootstrap runtime user before migrations
+npm run db:bootstrap
+# 2. Deploy migrations
+npm run db:deploy
+# 3. Apply least-privilege permissions & ledger immutability
 psql -d $env:DIRECT_URL -v "api_password='<password>'" -f scripts/sql/managed-db-roles.sql
-# Verify least-privilege constraints
+# 4. Verify role constraints
 npm run db:verify-roles
 ```
+
+*Note*: Use `sslmode=verify-full` on managed databases. `DIRECT_URL` and `BACKUP_DATABASE_URL` must connect to the direct host; `DATABASE_URL` connects to the `-pooler` host.
 
 ### Smoke Test
 
