@@ -529,6 +529,37 @@ describe('Approvals HTTP Integration & Flutter Parity', () => {
     expect(vote3.body.approveCount).toBe(3);
     expect(vote3.body.status).toBe('approved');
 
+    // Query detail to verify voter breakdown and eligible snapshot
+    const detailRes = await request(app)
+      .get(`/v1/groups/${fixture.group.id}/approvals/${approvalId}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(detailRes.status).toBe(200);
+    expect(detailRes.body.eligibleCount).toBe(5);
+    expect(detailRes.body.requesterMemberId).toBe(fixture.b.membership.id);
+
+    // Assert the three approving voters are Owner, C and Sita by memberId
+    const approvedMemberIds = (
+      detailRes.body.votes as Array<{ memberId: string; choice: string }>
+    )
+      .filter((v) => v.choice === 'approve')
+      .map((v) => v.memberId)
+      .sort();
+    const expectedApprovers = [
+      fixture.owner.membership.id,
+      fixture.c.membership.id,
+      fixture.sita.membership.id,
+    ].sort();
+    expect(approvedMemberIds).toEqual(expectedApprovers);
+
+    // Assert requester B is strictly not in the eligible snapshot
+    const eligibleVoters = await directPrisma.approvalEligibleVoter.findMany({
+      where: { requestId: approvalId },
+    });
+    expect(eligibleVoters).toHaveLength(5);
+    expect(eligibleVoters.map((ev) => ev.memberId)).not.toContain(
+      fixture.b.membership.id,
+    );
+
     // 5. Ram tries to vote after decision -> 409 approval_not_open
     const vote4 = await request(app)
       .post(`/v1/groups/${fixture.group.id}/approvals/${approvalId}/votes`)

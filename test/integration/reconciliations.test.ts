@@ -267,7 +267,28 @@ describe('Bank Reconciliations HTTP Integration & Flutter Parity', () => {
   // =========================================================================
 
   it('Parity Scenario (e) reports_e2e_test: Record 31 Oct / NPR 5,200 -> matched; NPR 5,000 for another date -> mismatch -NPR 200; duplicate date rejected', async () => {
-    // Mirrors Dart test: test/features/reports/reports_e2e_test.dart (reconciliation section)
+    // Mirrors Dart tests: test/features/reports/reports_e2e_test.dart:612-625 ('treasurer records a matched reconciliation')
+    // and lines 642-658 ('treasurer records a mismatch with the difference').
+    // In Flutter, seed group 'g1' has verified ledger balance of NPR 5,200 as of 31 Oct 2026.
+    // Dart constants:
+    // 1. Matched case (reports_e2e_test.dart:612):
+    //    Statement date: 2026-10-31, bank: NPR 5,200 (520,000 paisa), recorded: NPR 5,200 (520,000 paisa), diff: 0 -> status: 'matched'
+    // 2. Mismatch case (reports_e2e_test.dart:642):
+    //    Bank: NPR 5,000 (500,000 paisa), recorded: NPR 5,200 (520,000 paisa), diff: -NPR 200 (-20,000 paisa, bank is lower) -> status: 'mismatch'
+    // In this sequential test, because 2026-10-31 is already recorded, the mismatch test uses 2026-10-26 (post-deposit),
+    // which has the exact same recorded balance of NPR 5,200.
+    const STATEMENT_DATE_MATCHED = '2026-10-31';
+    const BANK_BALANCE_MATCHED_PAISA = 520000;
+    const RECORDED_BALANCE_MATCHED_PAISA = 520000;
+    const DIFFERENCE_MATCHED_PAISA = 0;
+    const STATUS_MATCHED = 'matched';
+
+    const STATEMENT_DATE_MISMATCH = '2026-10-26';
+    const BANK_BALANCE_MISMATCH_PAISA = 500000;
+    const RECORDED_BALANCE_MISMATCH_PAISA = 520000;
+    const DIFFERENCE_MISMATCH_PAISA = -20000;
+    const STATUS_MISMATCH = 'mismatch';
+
     const fixture = await seedStandardGroup(directPrisma);
     const treasurerToken = FakeTokenVerifier.createToken(
       `fb-${fixture.owner.user.id}`,
@@ -282,7 +303,7 @@ describe('Bank Reconciliations HTTP Integration & Flutter Parity', () => {
         groupId: fixture.group.id,
         kind: 'contribution',
         title: 'October Savings',
-        magnitudePaisa: 520000n, // NPR 5,200
+        magnitudePaisa: BigInt(RECORDED_BALANCE_MATCHED_PAISA),
         occurredAt: new Date('2026-10-25T10:00:00.000Z'),
         postedAt: new Date('2026-10-25T10:00:00.000Z'),
         actorMemberId: fixture.owner.membership.id,
@@ -298,15 +319,17 @@ describe('Bank Reconciliations HTTP Integration & Flutter Parity', () => {
       .set('Authorization', `Bearer ${treasurerToken}`)
       .set('Idempotency-Key', generateId())
       .send({
-        statementDate: '2026-10-31',
-        bankBalancePaisa: 520000,
+        statementDate: STATEMENT_DATE_MATCHED,
+        bankBalancePaisa: BANK_BALANCE_MATCHED_PAISA,
         note: 'Bank statement 31 Oct',
       });
     expect(matchedRes.status).toBe(201);
-    expect(matchedRes.body.status).toBe('matched');
-    expect(matchedRes.body.recordedBalancePaisa).toBe(520000);
-    expect(matchedRes.body.bankBalancePaisa).toBe(520000);
-    expect(matchedRes.body.differencePaisa).toBe(0);
+    expect(matchedRes.body.status).toBe(STATUS_MATCHED);
+    expect(matchedRes.body.recordedBalancePaisa).toBe(
+      RECORDED_BALANCE_MATCHED_PAISA,
+    );
+    expect(matchedRes.body.bankBalancePaisa).toBe(BANK_BALANCE_MATCHED_PAISA);
+    expect(matchedRes.body.differencePaisa).toBe(DIFFERENCE_MATCHED_PAISA);
 
     // 2. Attempt duplicate reconciliation for same date (2026-10-31) -> 409 reconciliation_already_recorded
     const dupRes = await request(app)
@@ -314,30 +337,29 @@ describe('Bank Reconciliations HTTP Integration & Flutter Parity', () => {
       .set('Authorization', `Bearer ${treasurerToken}`)
       .set('Idempotency-Key', generateId())
       .send({
-        statementDate: '2026-10-31',
-        bankBalancePaisa: 520000,
+        statementDate: STATEMENT_DATE_MATCHED,
+        bankBalancePaisa: BANK_BALANCE_MATCHED_PAISA,
       });
     expect(dupRes.status).toBe(409);
     expect(dupRes.body.error.code).toBe('reconciliation_already_recorded');
 
-    // 3. Record for another date (e.g. 2026-10-20, where balance was 0) with bankBalance NPR 5,000 (500,000 paisa)
-    // Wait, on 2026-10-20 before the 25 Oct entry, recorded was 0, so diff is +500,000.
-    // Or on 2026-10-26 where recorded is 5,200 NPR, bank is NPR 5,000 (500,000 paisa) ->
-    // difference = bank - recorded = 500,000 - 520,000 = -20,000 (-NPR 200 meaning bank is lower!)
+    // 3. Record mismatch: bank NPR 5,000, recorded NPR 5,200 -> difference -NPR 200 (bank lower)
     const mismatchRes = await request(app)
       .post(`/v1/groups/${fixture.group.id}/reconciliations`)
       .set('Authorization', `Bearer ${treasurerToken}`)
       .set('Idempotency-Key', generateId())
       .send({
-        statementDate: '2026-10-26',
-        bankBalancePaisa: 500000, // NPR 5,000
+        statementDate: STATEMENT_DATE_MISMATCH,
+        bankBalancePaisa: BANK_BALANCE_MISMATCH_PAISA,
         note: 'Bank mismatch',
       });
     expect(mismatchRes.status).toBe(201);
-    expect(mismatchRes.body.status).toBe('mismatch');
-    expect(mismatchRes.body.recordedBalancePaisa).toBe(520000);
-    expect(mismatchRes.body.bankBalancePaisa).toBe(500000);
-    expect(mismatchRes.body.differencePaisa).toBe(-20000); // -NPR 200
+    expect(mismatchRes.body.status).toBe(STATUS_MISMATCH);
+    expect(mismatchRes.body.recordedBalancePaisa).toBe(
+      RECORDED_BALANCE_MISMATCH_PAISA,
+    );
+    expect(mismatchRes.body.bankBalancePaisa).toBe(BANK_BALANCE_MISMATCH_PAISA);
+    expect(mismatchRes.body.differencePaisa).toBe(DIFFERENCE_MISMATCH_PAISA);
 
     // Check audit log for reconciliation.recorded
     const reconAudits = await directPrisma.auditLog.findMany({
@@ -348,7 +370,11 @@ describe('Bank Reconciliations HTTP Integration & Flutter Parity', () => {
       orderBy: { createdAt: 'asc' },
     });
     expect(reconAudits).toHaveLength(2);
-    expect(reconAudits[0]!.afterValue).toBe('2026-10-31:0');
-    expect(reconAudits[1]!.afterValue).toBe('2026-10-26:-20000');
+    expect(reconAudits[0]!.afterValue).toBe(
+      `${STATEMENT_DATE_MATCHED}:${DIFFERENCE_MATCHED_PAISA}`,
+    );
+    expect(reconAudits[1]!.afterValue).toBe(
+      `${STATEMENT_DATE_MISMATCH}:${DIFFERENCE_MISMATCH_PAISA}`,
+    );
   });
 });
