@@ -25,13 +25,17 @@ FROM node:22-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV PORT=10000
 
 # Copy dependency manifests and prisma schema
 COPY package.json package-lock.json ./
 COPY prisma ./prisma/
 
-# Install only production dependencies and generate client
-RUN npm ci --omit=dev && npx prisma generate
+# Install only production dependencies without executing postinstall scripts
+RUN npm ci --omit=dev --ignore-scripts
+
+# Copy the pre-generated Prisma client artifacts from the builder stage
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 
 # Copy compiled JavaScript output from builder
 COPY --from=builder /app/dist ./dist
@@ -39,6 +43,6 @@ COPY --from=builder /app/dist ./dist
 # Run as non-root user for security
 USER node
 
-EXPOSE 3000
+EXPOSE 10000
 
 CMD ["npm", "run", "start:prod"]
