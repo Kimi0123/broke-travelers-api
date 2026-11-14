@@ -8,6 +8,8 @@ param(
     [string]$TestToken = ""
 )
 
+$BaseUrl = $BaseUrl.TrimEnd('/')
+
 $ErrorActionPreference = "Continue"
 $failedCount = 0
 $passedCount = 0
