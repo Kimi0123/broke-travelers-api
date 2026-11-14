@@ -48,9 +48,46 @@ try {
 
     # 4. Restore dump
     if ($DumpFile -and (Test-Path $DumpFile)) {
-        Write-Host "Restoring from provided dump file: $DumpFile..." -ForegroundColor Cyan
-        docker cp $DumpFile "${ContainerName}:/tmp/restore.dump" | Out-Null
-        docker exec $ContainerName pg_restore -U postgres -d $TargetDb --no-owner --no-privileges /tmp/restore.dump | Out-Null
+        $actualDump = $DumpFile
+        $cleanupDecrypted = $false
+
+        # Auto-decrypt if an encrypted GPG artifact (.dump.gpg or .gpg) was passed
+        if ($DumpFile.EndsWith(".gpg")) {
+            Write-Host "Detected encrypted backup artifact: $DumpFile" -ForegroundColor Cyan
+            $actualDump = [System.IO.Path]::ChangeExtension($DumpFile, ".dump")
+            if (Test-Path $actualDump) {
+                Remove-Item -Force $actualDump
+            }
+
+            # Locate gpg executable (check PATH then Git's bundled gpg on Windows)
+            $gpgCmd = "gpg"
+            if (-not (Get-Command "gpg" -ErrorAction SilentlyContinue)) {
+                if (Test-Path "C:\Program Files\Git\usr\bin\gpg.exe") {
+                    $gpgCmd = "C:\Program Files\Git\usr\bin\gpg.exe"
+                }
+            }
+
+            if ($env:BACKUP_ENCRYPTION_KEY) {
+                Write-Host "Decrypting using passphrase from `$env:BACKUP_ENCRYPTION_KEY..." -ForegroundColor Cyan
+                $env:BACKUP_ENCRYPTION_KEY | & $gpgCmd --batch --yes --pinentry-mode loopback --passphrase-fd 0 --decrypt -o $actualDump $DumpFile
+            } else {
+                Write-Host "Decrypting with GPG (passphrase prompt)..." -ForegroundColor Cyan
+                & $gpgCmd --decrypt -o $actualDump $DumpFile
+            }
+
+            if ($LASTEXITCODE -ne 0 -or -not (Test-Path $actualDump)) {
+                throw "GPG decryption failed for $DumpFile"
+            }
+            $cleanupDecrypted = $true
+        }
+
+        Write-Host "Restoring from dump file: $actualDump..." -ForegroundColor Cyan
+        docker cp $actualDump "${ContainerName}:/tmp/restore.dump" | Out-Null
+        docker exec $ContainerName pg_restore -U postgres -d $TargetDb --no-owner --no-privileges /tmp/restore.dump 2>&1 | Out-Null
+
+        if ($cleanupDecrypted) {
+            Remove-Item -Force $actualDump -ErrorAction SilentlyContinue
+        }
     } else {
         Write-Host "No dump file passed. Taking live compressed dump from broke-travelers-db..." -ForegroundColor Cyan
         # Take dump directly inside container filesystem to avoid Windows pipe binary mangling

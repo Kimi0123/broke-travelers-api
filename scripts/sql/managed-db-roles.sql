@@ -13,7 +13,7 @@ SELECT format(
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'api_user')\gexec
 
 SELECT format(
-  'ALTER ROLE api_user WITH LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT',
+  'ALTER ROLE api_user WITH LOGIN PASSWORD %L',
   :'api_password'
 )
 WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'api_user')\gexec
