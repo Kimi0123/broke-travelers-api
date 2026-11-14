@@ -8,16 +8,11 @@ on:
 
 jobs:
   backup:
-    name: Backup and Encrypt Database
+    name: Backup, Verify and Encrypt Database
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Install PostgreSQL client
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y postgresql-client
 
       - name: Dump database
         env:
@@ -27,9 +22,35 @@ jobs:
             echo "::error::BACKUP_DATABASE_URL secret is not configured"
             exit 1
           fi
-          # Custom compressed archive format (-Fc)
-          pg_dump -Fc --no-owner --no-privileges "$BACKUP_DATABASE_URL" -f backup.dump
-          echo "Database dump completed successfully."
+
+          # Strip Prisma-only URI query parameters (e.g. ?schema=public) that libpq/pg_dump rejects
+          CLEAN_URL=$(echo "$BACKUP_DATABASE_URL" | sed -e 's/[?&]schema=[^&#]*//g' -e 's/?&/?/' -e 's/[?&]$//')
+
+          # Run pg_dump using official postgres:17 Docker image to guarantee exact major version parity
+          # with PostgreSQL 17 without relying on external PGDG apt repository mirrors.
+          docker run --rm \
+            -v "$PWD:/work" \
+            -w /work \
+            --user "$(id -u):$(id -g)" \
+            -e CLEAN_URL \
+            postgres:17 \
+            sh -c 'pg_dump "$CLEAN_URL" -Fc --no-owner --no-privileges -f /work/backup.dump'
+
+          if [ ! -f backup.dump ]; then
+            echo "::error::Database dump file backup.dump was not created"
+            exit 1
+          fi
+
+          # Minimum size validation: an empty database with schema, triggers, and sequences is ~48 KB.
+          # Anything smaller than 10,240 bytes (10 KB) indicates an empty, truncated, or failed dump.
+          DUMP_SIZE=$(wc -c < backup.dump | tr -d ' ')
+          MIN_SIZE=10240
+          echo "Dump file size: ${DUMP_SIZE} bytes (minimum required: ${MIN_SIZE} bytes)"
+
+          if [ "$DUMP_SIZE" -lt "$MIN_SIZE" ]; then
+            echo "::error::Database dump is suspiciously small (${DUMP_SIZE} bytes < ${MIN_SIZE} bytes minimum)"
+            exit 1
+          fi
 
       - name: Encrypt backup artifact
         env:
@@ -39,10 +60,48 @@ jobs:
             echo "::error::BACKUP_ENCRYPTION_KEY secret is not configured"
             exit 1
           fi
-          # Symmetric AES256 encryption via GPG
-          gpg --symmetric --batch --yes --passphrase "$BACKUP_ENCRYPTION_KEY" --cipher-algo AES256 -o backup.dump.gpg backup.dump
+
+          # Symmetric AES256 encryption via GPG, reading passphrase strictly from stdin
+          printf '%s' "$BACKUP_ENCRYPTION_KEY" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 --symmetric --cipher-algo AES256 -o backup.dump.gpg backup.dump
+
+          # Remove unencrypted dump file immediately after encryption
           rm -f backup.dump
-          echo "Backup encrypted successfully as backup.dump.gpg."
+          echo "Database dump successfully encrypted as backup.dump.gpg; unencrypted dump removed."
+
+      - name: Verify backup integrity
+        env:
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+        run: |
+          # Decrypt .gpg into a temporary file using passphrase read strictly from stdin
+          printf '%s' "$BACKUP_ENCRYPTION_KEY" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 --decrypt -o verify.dump backup.dump.gpg
+
+          # Inspect table of contents using matching postgres:17 client
+          TOC_OUTPUT=$(docker run --rm \
+            -v "$PWD:/work" \
+            -w /work \
+            postgres:17 \
+            pg_restore --list /work/verify.dump)
+
+          rm -f verify.dump
+
+          echo "$TOC_OUTPUT" > toc.txt
+
+          HAS_LEDGER=0
+          HAS_AUDIT=0
+          if grep -q "TABLE.*ledger_entries" toc.txt; then
+            HAS_LEDGER=1
+          fi
+          if grep -q "TABLE.*audit_log" toc.txt; then
+            HAS_AUDIT=1
+          fi
+          rm -f toc.txt
+
+          if [ "$HAS_LEDGER" -ne 1 ] || [ "$HAS_AUDIT" -ne 1 ]; then
+            echo "::error::Backup verification failed: critical tables missing in dump TOC (ledger_entries=$HAS_LEDGER, audit_log=$HAS_AUDIT)"
+            exit 1
+          fi
+
+          echo "Backup verification passed: successfully decrypted and verified required tables (ledger_entries, audit_log) in dump TOC."
 
       - name: Upload backup artifact
         uses: actions/upload-artifact@v4
