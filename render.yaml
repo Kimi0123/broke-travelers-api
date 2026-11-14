@@ -7,7 +7,7 @@ services:
     region: singapore
     plan: free
     branch: main
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm run start:prod
     healthCheckPath: /v1/health/ready
     envVars:
@@ -19,8 +19,6 @@ services:
         value: 10000
       - key: DATABASE_URL
         sync: false
-      - key: DIRECT_URL
-        sync: false
       - key: FIREBASE_PROJECT_ID
         sync: false
       - key: FIREBASE_SERVICE_ACCOUNT_JSON
@@ -28,6 +26,6 @@ services:
       - key: TRUST_PROXY_HOPS
         value: '1'
       - key: REQUIRE_VERIFIED_EMAIL
-        value: 'true'
+        value: 'false'
       - key: LOG_LEVEL
         value: info
