@@ -175,8 +175,28 @@ describe('Auth & Session HTTP Integration', () => {
           name: fixture.group.name,
           role: 'owner',
           isTreasurer: true,
+          monthlyContributionPaisa: Number(fixture.group.expectedPaisa),
+          dueDay: fixture.group.dueDay,
+          memberCount: 5,
+          joinedAt: expect.stringMatching(
+            /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+          ),
         },
       ],
+    });
+
+    // Exact-key assertion for the new fields on the group object
+    expect(res1.body.groups[0]).toEqual({
+      id: fixture.group.id,
+      name: fixture.group.name,
+      role: 'owner',
+      isTreasurer: true,
+      monthlyContributionPaisa: Number(fixture.group.expectedPaisa),
+      dueDay: fixture.group.dueDay,
+      memberCount: 5,
+      joinedAt: expect.stringMatching(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+      ),
     });
 
     // Soft-remove member1 and verify their profile shows no active groups
@@ -197,5 +217,119 @@ describe('Auth & Session HTTP Integration', () => {
 
     expect(res2.status).toBe(200);
     expect(res2.body.groups).toEqual([]);
+  });
+
+  it('GET /v1/profile memberCount excludes soft-removed members', async () => {
+    const fixture = await seedStandardGroup(directPrisma);
+    const ownerToken = FakeTokenVerifier.createToken(
+      `fb-${fixture.owner.user.id}`,
+      fixture.owner.user.email,
+      true,
+      'Aarav Owner',
+    );
+
+    const beforeRes = await request(app)
+      .get('/v1/profile')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(beforeRes.status).toBe(200);
+    expect(beforeRes.body.groups[0].memberCount).toBe(5);
+
+    // Soft-remove member1
+    await directPrisma.groupMembership.update({
+      where: { id: fixture.member1.membership.id },
+      data: { leftAt: new Date() },
+    });
+
+    const afterRes = await request(app)
+      .get('/v1/profile')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(afterRes.status).toBe(200);
+    expect(afterRes.body.groups[0].memberCount).toBe(4);
+  });
+
+  it("GET /v1/profile returns groups [] for a removed member's own profile", async () => {
+    const fixture = await seedStandardGroup(directPrisma);
+
+    await directPrisma.groupMembership.update({
+      where: { id: fixture.member1.membership.id },
+      data: { leftAt: new Date() },
+    });
+
+    const member1Token = FakeTokenVerifier.createToken(
+      `fb-${fixture.member1.user.id}`,
+      fixture.member1.user.email,
+      true,
+      'Member One',
+    );
+
+    const res = await request(app)
+      .get('/v1/profile')
+      .set('Authorization', `Bearer ${member1Token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.groups).toEqual([]);
+  });
+
+  it('GET /v1/profile returns monthlyContributionPaisa, dueDay, and memberCount as JSON integers, not strings', async () => {
+    const fixture = await seedStandardGroup(directPrisma);
+    const ownerToken = FakeTokenVerifier.createToken(
+      `fb-${fixture.owner.user.id}`,
+      fixture.owner.user.email,
+      true,
+      'Aarav Owner',
+    );
+
+    const res = await request(app)
+      .get('/v1/profile')
+      .set('Authorization', `Bearer ${ownerToken}`);
+
+    expect(res.status).toBe(200);
+    const group = res.body.groups[0];
+
+    expect(typeof group.monthlyContributionPaisa).toBe('number');
+    expect(Number.isInteger(group.monthlyContributionPaisa)).toBe(true);
+    expect(typeof group.dueDay).toBe('number');
+    expect(Number.isInteger(group.dueDay)).toBe(true);
+    expect(typeof group.memberCount).toBe('number');
+    expect(Number.isInteger(group.memberCount)).toBe(true);
+
+    expect(typeof (group.monthlyContributionPaisa as unknown)).not.toBe(
+      'string',
+    );
+    expect(typeof (group.dueDay as unknown)).not.toBe('string');
+    expect(typeof (group.memberCount as unknown)).not.toBe('string');
+  });
+
+  it('GET /v1/profile has full parity with GET /v1/groups/:groupId for financial and roster numbers', async () => {
+    const fixture = await seedStandardGroup(directPrisma);
+    const ownerToken = FakeTokenVerifier.createToken(
+      `fb-${fixture.owner.user.id}`,
+      fixture.owner.user.email,
+      true,
+      'Aarav Owner',
+    );
+
+    const [profileRes, groupRes] = await Promise.all([
+      request(app)
+        .get('/v1/profile')
+        .set('Authorization', `Bearer ${ownerToken}`),
+      request(app)
+        .get(`/v1/groups/${fixture.group.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`),
+    ]);
+
+    expect(profileRes.status).toBe(200);
+    expect(groupRes.status).toBe(200);
+
+    const profileGroup = profileRes.body.groups[0];
+    const groupDetails = groupRes.body;
+
+    expect(profileGroup.id).toBe(groupDetails.id);
+    expect(profileGroup.name).toBe(groupDetails.name);
+    expect(profileGroup.monthlyContributionPaisa).toBe(
+      groupDetails.monthlyContributionPaisa,
+    );
+    expect(profileGroup.dueDay).toBe(groupDetails.dueDay);
+    expect(profileGroup.memberCount).toBe(groupDetails.memberCount);
   });
 });

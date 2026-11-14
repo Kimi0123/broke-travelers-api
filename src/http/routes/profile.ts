@@ -28,7 +28,17 @@ export function createProfileRouter(deps: ProfileRouteDeps): Router {
           leftAt: null,
         },
         include: {
-          group: true,
+          group: {
+            include: {
+              _count: {
+                select: {
+                  memberships: {
+                    where: { leftAt: null },
+                  },
+                },
+              },
+            },
+          },
         },
         orderBy: {
           joinedAt: 'asc',
@@ -40,6 +50,10 @@ export function createProfileRouter(deps: ProfileRouteDeps): Router {
         name: m.group.name,
         role: m.isOwner ? 'owner' : 'member',
         isTreasurer: m.isTreasurer,
+        monthlyContributionPaisa: Number(m.group.expectedPaisa),
+        dueDay: m.group.dueDay,
+        memberCount: m.group._count.memberships,
+        joinedAt: m.joinedAt.toISOString(),
       }));
 
       res.status(200).json({

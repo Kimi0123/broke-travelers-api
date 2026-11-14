@@ -19,7 +19,7 @@ Versioned HTTP REST API specification for Broke Travelers backend API.
   - *Email Verification Policy*: Creating or joining a group requires `email_verified: true` in the token. Unverified accounts receive 403 `email_not_verified` (*Owner Decision*).
 - **Group Authorization**: Scoped by `groupId` in the URL path. Server queries `group_memberships` for `(group_id, user_id)` and verifies `left_at IS NULL`.
 - **Non-Member & Cross-Group Access Policy**: Callers who are not active members of `:groupId` strictly receive HTTP 404 `group_not_found` (never 403), even if the group exists. This prevents group existence enumeration. HTTP 403 `forbidden` is reserved strictly for role failures inside a group the caller actively belongs to.
-- **Multi-Group Note**: `GET /v1/profile` returns `groups[]`. The Flutter app uses the first group until a group switcher UI is added in Phase 6.
+- **Multi-Group Note**: `GET /v1/profile` returns `groups[]` ordered by `joinedAt ASC`. The Flutter app uses `groups[0]` until a group switcher UI is added in Phase 6.
 
 ### 1.3 Data Types & Formatting
 - **Money Representation**: Integer paisa as JSON `number` (e.g. `70000` = 700 NPR). JavaScript `Number.MAX_SAFE_INTEGER` ($9 \times 10^{15}$) easily encompasses the $10,000,000$ NPR ($1,000,000,000$ paisa) application ceiling.
@@ -67,6 +67,48 @@ Versioned HTTP REST API specification for Broke Travelers backend API.
 - **Replaces**: `ProfileRepository.getProfile`
 - **Auth**: Authenticated User (`user_not_provisioned` if session not initialized) | **Derivation**: Read-only
 - **Response 200**: User profile, active roles, and group memberships.
+  ```json
+  {
+    "user": {
+      "id": "01931e50-1111-7000-8000-000000000001",
+      "name": "Nirvan",
+      "email": "nirvan@example.com"
+    },
+    "groups": [
+      {
+        "id": "01931e50-2222-7000-8000-000000000001",
+        "name": "Himalayan Crew",
+        "role": "owner",
+        "isTreasurer": true,
+        "monthlyContributionPaisa": 70000,
+        "dueDay": 5,
+        "memberCount": 5,
+        "joinedAt": "2026-08-01T00:00:00.000Z"
+      }
+    ]
+  }
+  ```
+- **Field Table (`groups[]`)**:
+  | Field | Type | Description |
+  |---|---|---|
+  | `id` | UUID string | Group unique identifier |
+  | `name` | string | Group display name |
+  | `role` | `'owner' \| 'member'` | Caller's role in the group |
+  | `isTreasurer` | boolean | Whether caller holds the Treasurer role |
+  | `monthlyContributionPaisa` | integer | Group expected monthly contribution in paisa |
+  | `dueDay` | integer (1–28) | Day of month when contributions are due |
+  | `memberCount` | integer | Count of active members (`left_at IS NULL`) |
+  | `joinedAt` | ISO-8601 UTC string | Timestamp when caller joined this group |
+
+- **Flutter Mapping Note**:
+  - `UserProfile.name` <- `user.name`
+  - `roles` <- `role` (`'owner'` -> `GroupRole.owner`) + `isTreasurer` (`true` -> `GroupRole.treasurer`) (or `GroupRole.member` if neither)
+  - `groupName` <- `groups[0].name`
+  - `monthlyContribution` <- `Money.paisa(groups[0].monthlyContributionPaisa)` (integer only, never double)
+  - `dueDay` <- `groups[0].dueDay`
+  - `memberCount` <- `groups[0].memberCount`
+  - `memberSince` <- `DateTime.parse(groups[0].joinedAt)` (UTC)
+  - The Flutter app uses `groups[0]` (groups are ordered `joinedAt ASC`).
 
 #### `POST /v1/groups`
 - **Replaces**: `GroupsRepository.createGroup`
