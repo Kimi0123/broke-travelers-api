@@ -17,6 +17,7 @@ import { createInvitationsRouter } from './routes/invitations.js';
 import { createMembersRouter } from './routes/members.js';
 import { createPaymentsRouter } from './routes/payments.js';
 import { createProfileRouter } from './routes/profile.js';
+import { createReconciliationsRouter } from './routes/reconciliations.js';
 import { createSessionRouter } from './routes/session.js';
 import { createTransactionsRouter } from './routes/transactions.js';
 
@@ -172,6 +173,14 @@ export function createApp(deps: AppDependencies): Express {
     );
     app.use(
       createApprovalsRouter({
+        prisma: deps.prisma,
+        tokenVerifier: deps.tokenVerifier,
+        clock: deps.clock,
+        idGenerator: deps.idGenerator,
+      }),
+    );
+    app.use(
+      createReconciliationsRouter({
         prisma: deps.prisma,
         tokenVerifier: deps.tokenVerifier,
         clock: deps.clock,
