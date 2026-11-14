@@ -185,7 +185,11 @@ export function loadConfig(
     if (!rawProjectId || isPlaceholderOrBlank(rawProjectId)) {
       invalidNames.push('FIREBASE_PROJECT_ID');
     }
-  } else if (rawProjectId !== undefined && isPlaceholderOrBlank(rawProjectId)) {
+  } else if (
+    rawProjectId !== undefined &&
+    rawProjectId.trim().length > 0 &&
+    PLACEHOLDERS.has(rawProjectId.trim().toLowerCase())
+  ) {
     invalidNames.push('FIREBASE_PROJECT_ID');
   }
 
@@ -203,16 +207,15 @@ export function loadConfig(
         normalizedServiceAccountJson = parsedSa.normalized;
       }
     }
-  } else if (rawServiceAccountJson !== undefined) {
-    if (isPlaceholderOrBlank(rawServiceAccountJson)) {
+  } else if (
+    rawServiceAccountJson !== undefined &&
+    rawServiceAccountJson.trim().length > 0
+  ) {
+    const parsedSa = parseServiceAccountJson(rawServiceAccountJson);
+    if (!parsedSa.valid) {
       invalidNames.push('FIREBASE_SERVICE_ACCOUNT_JSON');
     } else {
-      const parsedSa = parseServiceAccountJson(rawServiceAccountJson);
-      if (!parsedSa.valid) {
-        invalidNames.push('FIREBASE_SERVICE_ACCOUNT_JSON');
-      } else {
-        normalizedServiceAccountJson = parsedSa.normalized;
-      }
+      normalizedServiceAccountJson = parsedSa.normalized;
     }
   }
 
@@ -224,7 +227,11 @@ export function loadConfig(
     'FIREBASE_AUTH_EMULATOR_HOST',
   ]) {
     const val = rawEnv[key];
-    if (val !== undefined && isPlaceholderOrBlank(val)) {
+    if (
+      val !== undefined &&
+      val.trim().length > 0 &&
+      PLACEHOLDERS.has(val.trim().toLowerCase())
+    ) {
       invalidNames.push(key);
     }
   }
