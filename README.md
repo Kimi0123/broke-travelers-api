@@ -12,8 +12,8 @@ Broke Travelers is an immutable financial ledger and group transparency recordke
 - **Testing**: Vitest with golden vectors ported from Dart, supertest integration suite
 
 ## Current Status
-**Phase 5.5 complete — 5.4 Cleanup, Governance Approvals & Bank Reconciliation Endpoints.**
-Express 5 REST API with Firebase ID token authentication, user session provisioning, groups CRUD, single-use invitations with brute-force lockout, member role management, contribution periods, payment submissions & reviews (with separation of duties and reference masking), transactions & reversals, keyset-paginated unified activity (`v_activity_items`), detailed member history, multi-member approval governance workflow (create, list, detail, vote with early rejection, cancel, and execute with separation of duties), and formal bank statement reconciliations at NPT calendar boundaries. Verified across 226 unit/vector tests (1 skipped) and 91 integration tests across 23 suites against real PostgreSQL.
+**Phase 5.6 complete — Reports, Dashboard Summary & Updates Feed.**
+Express 5 REST API with Firebase ID token authentication, user session provisioning, groups CRUD, single-use invitations with brute-force lockout, member role management, contribution periods, payment submissions & reviews (with separation of duties and reference masking), transactions & reversals, keyset-paginated unified activity (`v_activity_items`), detailed member history, multi-member approval governance workflow, formal bank statement reconciliations at NPT calendar boundaries, dashboard summaries, aggregated reports (selectable months, monthly, member-wise, annual, outflow with reversal netting), and dynamic per-viewer updates notifications feed with persisted read-state tracking. Verified across 226 unit/vector tests (1 skipped) and 146 integration tests across 28 suites against real PostgreSQL.
 
 ## Implemented Endpoints Reference
 
@@ -53,6 +53,17 @@ Express 5 REST API with Firebase ID token authentication, user session provision
 | `/v1/groups/:id/reconciliations` | GET | Active Member | List bank reconciliation records |
 | `/v1/groups/:id/reconciliations/recorded-balance` | GET | Active Member | Query recorded balance at NPT statement date cutoff |
 | `/v1/groups/:id/reconciliations` | POST | Treasurer | Record bank statement reconciliation against ledger |
+| `/v1/groups/:id/dashboard` | GET | Active Member | Complete dashboard metrics (balance, pending, deadlines, activity) |
+| `/v1/groups/:id/reports/months` | GET | Active Member | Selectable months and years from group creation to current anchor |
+| `/v1/groups/:id/reports/monthly` | GET | Active Member | Monthly statement with opening/closing balances and derived counts |
+| `/v1/groups/:id/reports/members` | GET | Active Member | Member obligation report with viewer privacy filtering |
+| `/v1/groups/:id/reports/annual` | GET | Active Member | Annual statement with monthly rows and net derivations |
+| `/v1/groups/:id/reports/expenses` | GET | Active Member | Annual expenses breakdown with reversal netting |
+| `/v1/groups/:id/reports/withdrawals` | GET | Active Member | Annual withdrawals breakdown with reversal netting |
+| `/v1/groups/:id/updates` | GET | Active Member | Dynamic per-viewer updates feed (privacy-filtered, up to 50 items) |
+| `/v1/groups/:id/updates/read` | POST | Active Member | Idempotently mark specific update IDs as read |
+| `/v1/groups/:id/updates/read-all` | POST | Active Member | Idempotently mark all current feed items as read |
+| `/v1/groups/:id/updates/unread-count` | GET | Active Member | Dynamic unread updates badge count |
 
 ## Run the API Locally
 
@@ -90,7 +101,7 @@ Express 5 REST API with Firebase ID token authentication, user session provision
 
 ```bash
 npm run test:unit         # Unit & 135 Dart golden vector tests (226 tests, 1 skipped)
-npm run test:integration  # Real PostgreSQL integration tests (78 tests across 21 suites)
+npm run test:integration  # Real PostgreSQL integration tests (146 tests across 28 suites)
 npm run lint              # ESLint check
 npm run format:check      # Prettier format check
 npm run typecheck         # TypeScript compiler check

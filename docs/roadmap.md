@@ -94,11 +94,23 @@ Ordered task breakdown for implementing the Broke Travelers backend API and comp
 
 ---
 
-### Task 5.6: Reports, Dashboard Summary & Updates Feed
+### Task 5.6: Reports, Dashboard Summary & Updates Feed — [DONE]
 - **Goal**: Implement aggregated financial reports (monthly, member-wise, annual, outflow), dashboard summary cards, and the per-viewer updates notification feed with read-state tracking.
-- **Deliverables**: Endpoints for `/v1/groups/:groupId/dashboard`, `/v1/groups/:groupId/reports/*`, `/v1/groups/:groupId/updates`, and `/v1/groups/:groupId/updates/mark-read`.
-- **Acceptance Tests**: Report date ranges validated against group history; cumulative month-boundary balances match Flutter report builders; updates feed strictly omits sensitive references and other members' pending amounts.
-- **Flutter Impact**: None.
+- **Status**: **DONE** (Backend commits `a574de2`, `2a9efb2`, `df53993`, `07c0752`, `ba28aa2` on branch `main`).
+- **Deliverables**:
+  - `GET /v1/groups/:groupId/dashboard`: Complete dashboard metrics matching Flutter `mock_dashboard_repository` (verified balance, viewer-scoped pending, obligated/verified counts, upcoming deadline, recent activity, open approvals, needs-your-vote, last reconciliation).
+  - `GET /v1/groups/:groupId/reports/months`: Valid selectable months (`YYYY-MM`) and years from group creation to current anchor month.
+  - `GET /v1/groups/:groupId/reports/monthly`: Monthly financial statement grouping contributions by `effectivePeriodMonth` and interest/outflows by `occurredAt`, netting reversals, with date range validation (`report_range_invalid`).
+  - `GET /v1/groups/:groupId/reports/members`: Member obligation status breakdown with strict privacy filtering (plain members see own pending only; other members' pending masked to 0).
+  - `GET /v1/groups/:groupId/reports/annual`: Annual financial statement with monthly net derivations and cumulative closing balance.
+  - `GET /v1/groups/:groupId/reports/expenses` and `.../withdrawals`: Annual outflow reports with reversal lineage and monthly totals.
+  - `GET /v1/groups/:groupId/updates`: Dynamic updates feed derived on read in single `REPEATABLE READ` snapshot, filtering sensitive references and other members' pending amounts, joined with `user_update_reads`.
+  - `POST /v1/groups/:groupId/updates/read` & `.../read-all`: Idempotent read state marking per user and group.
+  - `GET /v1/groups/:groupId/updates/unread-count`: Dynamic unread badge counter.
+  - Full Flutter end-to-end parity test suite (`updates-e2e.test.ts`) mirroring `test/app/updates_e2e_test.dart`.
+- **Acceptance Tests**: 226 unit tests (1 skipped); 146 integration tests across 28 suites passing against real PostgreSQL; verified across consecutive runs with 0 flakiness.
+- **Flutter Impact**: None (backend standalone).
+- **Next Task**: Task 5.7 (Staging Deployment, Automated Backups & End-to-End Verification).
 
 ---
 

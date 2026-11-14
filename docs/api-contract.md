@@ -636,11 +636,225 @@ Provides formal monthly and periodic bank statement reconciliation against the i
 
 ---
 
-### 2.9 Dashboard, Reports & Updates (Deferred to Task 5.6)
-- `GET /v1/groups/:groupId/dashboard`: Replaces `DashboardRepository.getDashboardSummary`.
-- `GET /v1/groups/:groupId/reports/*`: Replaces `ReportsRepository` (monthly, members, annual, outflow).
-- `GET /v1/groups/:groupId/updates`: Replaces `UpdatesRepository.getUpdates` (Derived per viewer; references strictly omitted).
-- `POST /v1/groups/:groupId/updates/mark-read`: Replaces client-only read tracking.
+### 2.9 Dashboard, Reports & Updates (IMPLEMENTED)
+
+Read-only derivations loaded in one `REPEATABLE READ` snapshot. Financial computations are purely functional (in `report-builders.ts`, `ledger-math.ts`, `obligation-status.ts`, and `due-dates.ts`); no financial logic in SQL or routes. All derived read endpoints set `Cache-Control: no-store`.
+
+#### `GET /v1/groups/:groupId/dashboard` (IMPLEMENTED)
+- **Replaces**: `DashboardRepository.getDashboardSummary`
+- **Auth**: Active Member | **Derivation**: Read-only (`Cache-Control: no-store`)
+- **Privacy Rules**:
+  - `pendingAmountPaisa`: For treasurers and owners, returns total unverified pending submissions across all active members. For plain members, returns ONLY their own pending submissions (0 if they have none pending). Other members' pending amounts are never leaked.
+  - `needsYourVote`: True if caller is in `eligibleVoters` for an open approval and has not yet voted.
+- **Errors**: 401 `unauthenticated`, 404 `group_not_found`
+- **Response 200**:
+  ```json
+  {
+    "verifiedBalancePaisa": 730000,
+    "pendingAmountPaisa": 70000,
+    "obligatedMemberCount": 4,
+    "verifiedMemberCount": 3,
+    "upcomingDeadline": {
+      "date": "2026-11-05",
+      "label": "5 Nov",
+      "isOverdue": true
+    },
+    "recentActivity": [
+      {
+        "id": "e13",
+        "source": "ledger",
+        "rawId": "uuid",
+        "kind": "contribution",
+        "title": "Ram's contribution",
+        "amountPaisa": 70000,
+        "status": "verified",
+        "occurredAt": "2026-11-03T04:00:00.000Z",
+        "signedAmountPaisa": 70000
+      }
+    ],
+    "openApprovalsCount": 1,
+    "needsYourVote": true,
+    "lastReconciliation": {
+      "statementDate": "2026-10-31",
+      "status": "matched",
+      "differencePaisa": 0
+    }
+  }
+  ```
+
+#### `GET /v1/groups/:groupId/reports/months` (IMPLEMENTED)
+- **Replaces**: `ReportsRepository.getSelectableMonths` / `getSelectableYears`
+- **Auth**: Active Member | **Derivation**: Read-only (`Cache-Control: no-store`)
+- **Rules**: Returns selectable months (`YYYY-MM`) and years (`YYYY`) from group creation month to current anchor month in chronological order.
+- **Errors**: 401 `unauthenticated`, 404 `group_not_found`
+- **Response 200**:
+  ```json
+  {
+    "selectableMonths": ["2026-09", "2026-10", "2026-11"],
+    "selectableYears": [2026]
+  }
+  ```
+
+#### `GET /v1/groups/:groupId/reports/monthly` (IMPLEMENTED)
+- **Replaces**: `ReportsRepository.getMonthlyReport`
+- **Auth**: Active Member | **Derivation**: Read-only (`Cache-Control: no-store`)
+- **Query Params**: `?month=YYYY-MM` (Required, within group history range).
+- **Rules**: Contributions grouped by `effectivePeriodMonth`; interest, expenses, and withdrawals grouped by `occurredAt`. Reversals netted.
+- **Errors**: 400 `invalid_request`, 400 `report_range_invalid`, 401 `unauthenticated`, 404 `group_not_found`
+- **Response 200**:
+  ```json
+  {
+    "month": "2026-11",
+    "openingPaisa": 520000,
+    "contributionsPaisa": 210000,
+    "interestPaisa": 0,
+    "expensesPaisa": 0,
+    "withdrawalsPaisa": 0,
+    "closingPaisa": 730000,
+    "pendingPaisa": 70000,
+    "obligatedCount": 4,
+    "verifiedCount": 3,
+    "expectedTotalPaisa": 280000,
+    "outstandingPaisa": 70000
+  }
+  ```
+
+#### `GET /v1/groups/:groupId/reports/members` (IMPLEMENTED)
+- **Replaces**: `ReportsRepository.getMemberReport`
+- **Auth**: Active Member | **Derivation**: Read-only (`Cache-Control: no-store`)
+- **Query Params**: `?month=YYYY-MM` (Required, within group history range).
+- **Privacy Rules**: Plain members see own `pendingPaisa` only; other members' `pendingPaisa` is masked to 0. Totals row matches displayed sum per viewer.
+- **Errors**: 400 `invalid_request`, 400 `report_range_invalid`, 401 `unauthenticated`, 404 `group_not_found`
+- **Response 200**:
+  ```json
+  {
+    "month": "2026-11",
+    "rows": [
+      {
+        "memberId": "uuid",
+        "name": "Hari",
+        "expectedPaisa": 70000,
+        "verifiedPaisa": 0,
+        "pendingPaisa": 70000,
+        "outstandingPaisa": 70000,
+        "status": "pendingVerification"
+      }
+    ],
+    "expectedTotalPaisa": 280000,
+    "verifiedTotalPaisa": 210000,
+    "pendingTotalPaisa": 70000,
+    "outstandingTotalPaisa": 70000
+  }
+  ```
+
+#### `GET /v1/groups/:groupId/reports/annual` (IMPLEMENTED)
+- **Replaces**: `ReportsRepository.getAnnualReport`
+- **Auth**: Active Member | **Derivation**: Read-only (`Cache-Control: no-store`)
+- **Query Params**: `?year=YYYY` (Required, integer).
+- **Rules**: Sums monthly rows for the calendar year up to current anchor month.
+- **Errors**: 400 `invalid_request`, 400 `report_range_invalid`, 401 `unauthenticated`, 404 `group_not_found`
+- **Response 200**:
+  ```json
+  {
+    "year": 2026,
+    "months": [
+      {
+        "month": "2026-11",
+        "contributionsPaisa": 210000,
+        "interestPaisa": 0,
+        "expensesPaisa": 0,
+        "withdrawalsPaisa": 0,
+        "netPaisa": 210000,
+        "closingPaisa": 730000
+      }
+    ],
+    "contributionsPaisa": 770000,
+    "interestPaisa": 10000,
+    "expensesPaisa": 50000,
+    "withdrawalsPaisa": 0,
+    "netPaisa": 730000,
+    "closingPaisa": 730000
+  }
+  ```
+
+#### `GET /v1/groups/:groupId/reports/expenses` and `GET /v1/groups/:groupId/reports/withdrawals` (IMPLEMENTED)
+- **Replaces**: `ReportsRepository.getOutflowReport`
+- **Auth**: Active Member | **Derivation**: Read-only (`Cache-Control: no-store`)
+- **Query Params**: `?year=YYYY` (Required, integer).
+- **Rules**: Outflow rows with `isReversed` and `isReversal` flags. Reversals netted in `totalPaisa` and `monthTotals`.
+- **Errors**: 400 `invalid_request`, 400 `report_range_invalid`, 401 `unauthenticated`, 404 `group_not_found`
+- **Response 200**:
+  ```json
+  {
+    "year": 2026,
+    "kind": "expense",
+    "rows": [
+      {
+        "id": "e10",
+        "title": "Group dinner",
+        "date": "2026-10-30",
+        "amountPaisa": 50000,
+        "isReversed": false,
+        "isReversal": false
+      }
+    ],
+    "totalPaisa": 50000,
+    "monthTotals": [
+      {
+        "month": "2026-10",
+        "totalPaisa": 50000
+      }
+    ]
+  }
+  ```
+
+#### `GET /v1/groups/:groupId/updates` (IMPLEMENTED)
+- **Replaces**: `UpdatesRepository.getUpdates`
+- **Auth**: Active Member | **Derivation**: Read-only (`Cache-Control: no-store`)
+- **Rules**: Derived per viewer; references strictly omitted; unread status joined with `user_update_reads`. Up to 50 items.
+- **Errors**: 401 `unauthenticated`, 404 `group_not_found`
+- **Response 200**:
+  ```json
+  {
+    "updates": [
+      {
+        "id": "pay-sub-1-verified",
+        "kind": "paymentVerification",
+        "title": "Payment verified",
+        "body": "Your NPR 700 contribution for November 2026 was verified.",
+        "createdAt": "2026-11-06T04:00:00.000Z",
+        "isRead": false,
+        "target": {
+          "type": "payments"
+        }
+      }
+    ]
+  }
+  ```
+
+#### `POST /v1/groups/:groupId/updates/read` (IMPLEMENTED)
+- **Replaces**: Client-only mark-read
+- **Auth**: Active Member | **Idempotent**: Naturally idempotent via `user_update_reads`
+- **Request**:
+  ```json
+  {
+    "ids": ["pay-sub-1-verified"]
+  }
+  ```
+- **Errors**: 400 `invalid_request`, 401 `unauthenticated`, 404 `group_not_found`
+- **Response 200**: `{ "markedCount": 1 }`
+
+#### `POST /v1/groups/:groupId/updates/read-all` (IMPLEMENTED)
+- **Replaces**: Client-only mark-all-read
+- **Auth**: Active Member | **Idempotent**: Naturally idempotent via `user_update_reads`
+- **Errors**: 401 `unauthenticated`, 404 `group_not_found`
+- **Response 200**: `{ "markedCount": 3 }`
+
+#### `GET /v1/groups/:groupId/updates/unread-count` (IMPLEMENTED)
+- **Replaces**: Client-only unread badge count
+- **Auth**: Active Member | **Derivation**: Read-only (`Cache-Control: no-store`)
+- **Errors**: 401 `unauthenticated`, 404 `group_not_found`
+- **Response 200**: `{ "unreadCount": 0 }`
 
 ---
 

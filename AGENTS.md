@@ -22,6 +22,7 @@ Backend REST API for Broke Travelers (Node.js, Express, TypeScript, PostgreSQL, 
 - Verified balance separation: pending or unverified payments NEVER count toward the verified group balance.
 - All signed ledger math respects direction: contributions and interest are inflows (+); expenses and withdrawals are outflows (-); reversals invert the original entry's sign.
 - Guard against negative balance: no ledger posting or approval execution may result in a negative verified group balance.
+- Dashboard, reports and updates are derived on read from the domain builders in one REPEATABLE READ snapshot; no financial logic in SQL or routes.
 - Every financial rule must have domain-level unit test coverage that runs without HTTP or database dependencies.
 
 ## Security & Server Authority

@@ -172,28 +172,40 @@ Every rule cites its source file and symbol in the Flutter codebase and indicate
 ---
 
 ## 8. Reports and Dashboard Derivations
-1. **Dynamic Derivations**: All balances and report figures are derived from verified ledger entries and roster membership, not statically stored summary counters.
+1. **Dynamic Derivations**: All balances and report figures are derived from verified ledger entries and roster membership, not statically stored summary counters. Derivations execute in a single `REPEATABLE READ` snapshot to prevent mid-read tearing across collections.
    - *Source*: `lib/features/reports/domain/report_builders.dart`, `lib/features/dashboard/data/repositories/mock_dashboard_repository.dart`.
-   - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
+   - *Status*: `ENFORCED_IN_POSTGRES_READ_MODEL`.
 2. **Monthly Report Alignment**: Contributions are grouped by `effectivePeriodMonth`; interest, expenses, and withdrawals are grouped by `occurredAt`. Opening and closing balances reflect cumulative verified entries as of month boundaries.
    - *Source*: `lib/features/reports/domain/report_builders.dart: buildMonthlyReport:66`.
-   - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
-3. **Range Validation**: Reports cannot request periods before group creation or future months (`ReportRangeException`).
+   - *Status*: `ENFORCED_IN_POSTGRES_READ_MODEL`.
+3. **Range Validation**: Reports cannot request periods before group creation or future months (`report_range_invalid` / `ReportRangeException`).
    - *Source*: `lib/features/reports/data/repositories/mock_reports_repository.dart: _checkMonth:71`.
-   - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
+   - *Status*: `ENFORCED_IN_POSTGRES_READ_MODEL`.
+4. **Reversal Netting**: In outflow reports (expenses and withdrawals), reversals are netted in `totalPaisa` and `monthTotals`, while individual rows maintain `isReversed` and `isReversal` lineage flags.
+   - *Source*: `lib/features/reports/domain/report_builders.dart: buildOutflowReport:379`.
+   - *Status*: `ENFORCED_IN_POSTGRES_READ_MODEL`.
+5. **Dashboard Privacy**: Plain members see only their own unverified `pendingAmountPaisa` (0 if none pending). Treasurers and owners see group-wide unverified pending totals. Other members' pending amounts are never leaked.
+   - *Source*: `lib/features/dashboard/data/repositories/mock_dashboard_repository.dart`.
+   - *Status*: `ENFORCED_IN_POSTGRES_READ_MODEL`.
+6. **Member Report Privacy**: In `GET /reports/members`, plain members see their own pending amount, while other members' pending amounts are masked to 0. The totals summary row equals the displayed sum for that viewer.
+   - *Source*: `lib/features/reports/domain/report_builders.dart: buildMemberReport`.
+   - *Status*: `ENFORCED_IN_POSTGRES_READ_MODEL`.
 
 ---
 
 ## 9. Updates and Notifications Feed
-1. **Per-Viewer Dynamic Derivation**: Feed items are synthesized on read per viewer, never broadcast statically.
+1. **Per-Viewer Dynamic Derivation**: Feed items are synthesized on read per viewer, never broadcast statically or written to an updates table.
    - *Source*: `lib/features/notifications/data/repositories/mock_updates_repository.dart: getUpdates:108`.
-   - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
+   - *Status*: `ENFORCED_IN_POSTGRES_READ_MODEL`.
 2. **Viewer Scope**: Items include viewer's payment status, contribution due reminders for unpaid obligated members, approval voting/lifecycle alerts, reconciliation notices, and Treasurer action queues.
    - *Source*: `mock_updates_repository.dart:129-424`.
-   - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
+   - *Status*: `ENFORCED_IN_POSTGRES_READ_MODEL`.
 3. **Privacy Guarantees**: Other members' pending payment amounts, personal identifiers, and payment references (full or masked) must NEVER appear in update titles or bodies.
    - *Source*: `test/features/notifications/mock_updates_repository_test.dart:265`.
-   - *Status*: `ENFORCED_IN_MOCK_REPOSITORY`.
+   - *Status*: `ENFORCED_IN_POSTGRES_READ_MODEL`.
+4. **Read State Persistence**: Read state is persisted per user and per group in `user_update_reads` (composite primary key `[userId, groupId, feedItemId]`). Marking as read is idempotent via `skipDuplicates`. Unread counts are computed dynamically by comparing derived feed items with the user's read set.
+   - *Source*: `lib/features/notifications/data/repositories/mock_updates_repository.dart: markRead:429`.
+   - *Status*: `ENFORCED_IN_POSTGRES_READ_MODEL`.
 
 ---
 
