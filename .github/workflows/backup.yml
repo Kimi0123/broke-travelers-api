@@ -23,8 +23,23 @@ jobs:
             exit 1
           fi
 
+          # Fail if connecting via a pooler endpoint; pg_dump requires the direct connection
+          DB_HOST=$(echo "$BACKUP_DATABASE_URL" | sed -e 's|^.*@||' -e 's|[:/].*$||')
+          if echo "$DB_HOST" | grep -q -- "-pooler"; then
+            echo "::error::BACKUP_DATABASE_URL points to a pooled endpoint (-pooler); pg_dump requires the direct endpoint"
+            exit 1
+          fi
+
           # Strip Prisma-only URI query parameters (e.g. ?schema=public) that libpq/pg_dump rejects
           CLEAN_URL=$(echo "$BACKUP_DATABASE_URL" | sed -e 's/[?&]schema=[^&#]*//g' -e 's/?&/?/' -e 's/[?&]$//')
+
+          if [ -z "$CLEAN_URL" ]; then
+            echo "::error::CLEAN_URL is empty after stripping query parameters"
+            exit 1
+          fi
+
+          echo "::add-mask::$CLEAN_URL"
+          export CLEAN_URL
 
           # Run pg_dump using official postgres:17 Docker image to guarantee exact major version parity
           # with PostgreSQL 17 without relying on external PGDG apt repository mirrors.
