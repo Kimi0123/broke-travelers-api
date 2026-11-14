@@ -32,7 +32,10 @@ try {
     while ($attempts -lt 30) {
         $ready = docker exec $ContainerName pg_isready -U postgres 2>&1
         if ($LASTEXITCODE -eq 0) {
-            break
+            docker exec $ContainerName psql -U postgres -c "SELECT 1;" 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                break
+            }
         }
         Start-Sleep -Seconds 1
         $attempts++
@@ -69,7 +72,17 @@ try {
 
             if ($env:BACKUP_ENCRYPTION_KEY) {
                 Write-Host "Decrypting using passphrase from `$env:BACKUP_ENCRYPTION_KEY..." -ForegroundColor Cyan
-                $env:BACKUP_ENCRYPTION_KEY | & $gpgCmd --batch --yes --pinentry-mode loopback --passphrase-fd 0 --decrypt -o $actualDump $DumpFile
+                $tempPassFile = Join-Path $env:TEMP ("gpg_pass_" + [System.IO.Path]::GetRandomFileName())
+                try {
+                    $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+                    [System.IO.File]::WriteAllText($tempPassFile, $env:BACKUP_ENCRYPTION_KEY, $utf8NoBom)
+                    & $gpgCmd --batch --yes --pinentry-mode loopback --passphrase-file $tempPassFile --decrypt -o $actualDump $DumpFile
+                }
+                finally {
+                    if (Test-Path $tempPassFile) {
+                        Remove-Item -Force $tempPassFile -ErrorAction SilentlyContinue
+                    }
+                }
             } else {
                 Write-Host "Decrypting with GPG (passphrase prompt)..." -ForegroundColor Cyan
                 & $gpgCmd --decrypt -o $actualDump $DumpFile
@@ -101,7 +114,72 @@ try {
         docker exec $ContainerName pg_restore -U postgres -d $TargetDb --no-owner --no-privileges /tmp/restore.dump 2>&1 | Out-Null
     }
 
-    # 5. Run verification queries
+    # 5. Schema sanity checks
+    Write-Host "Running schema sanity checks on restored database..." -ForegroundColor Cyan
+
+    # 5a. Derive expected tables from prisma/schema.prisma
+    $schemaPath = Join-Path $PSScriptRoot "..\prisma\schema.prisma"
+    if (Test-Path $schemaPath) {
+        $schemaContent = Get-Content $schemaPath -Raw
+        $expectedTables = [regex]::Matches($schemaContent, '@@map\("([^"]+)"\)') | ForEach-Object { $_.Groups[1].Value } | Sort-Object
+    } else {
+        $expectedTables = @(
+            'users', 'groups', 'group_memberships', 'invitations',
+            'payment_submissions', 'ledger_entries', 'approval_requests',
+            'approval_eligible_voters', 'approval_votes', 'bank_reconciliations',
+            'audit_log', 'idempotency_keys', 'user_update_reads', 'invitation_attempts'
+        ) | Sort-Object
+    }
+
+    $existingTablesRaw = docker exec $ContainerName psql -U postgres -d $TargetDb -t -A -c "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE';" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to query tables from restored database: $existingTablesRaw"
+    }
+    $existingTables = $existingTablesRaw -split "`r?`n" | Where-Object { $_ -and $_.Trim() }
+
+    $missingTables = @()
+    foreach ($tbl in $expectedTables) {
+        if ($existingTables -notcontains $tbl) {
+            $missingTables += $tbl
+        }
+    }
+    if ($missingTables.Count -gt 0) {
+        throw "Schema sanity check failed: missing expected table(s) in restored database: $($missingTables -join ', ')"
+    }
+    Write-Host "  [OK] All $($expectedTables.Count) expected application tables present." -ForegroundColor Green
+
+    # 5b. Verify append-only triggers on ledger_entries and audit_log
+    $requiredTriggers = @(
+        'trg_ledger_entries_append_only',
+        'trg_ledger_entries_truncate_guard',
+        'trg_audit_log_append_only',
+        'trg_audit_log_truncate_guard'
+    )
+    $triggerSql = @"
+SELECT tgname
+FROM pg_trigger t
+JOIN pg_class c ON t.tgrelid = c.oid
+WHERE c.relname IN ('ledger_entries', 'audit_log')
+  AND tgname IN ('trg_ledger_entries_append_only', 'trg_ledger_entries_truncate_guard', 'trg_audit_log_append_only', 'trg_audit_log_truncate_guard');
+"@
+    $existingTriggersRaw = docker exec $ContainerName psql -U postgres -d $TargetDb -t -A -c $triggerSql 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to query triggers from restored database: $existingTriggersRaw"
+    }
+    $existingTriggers = $existingTriggersRaw -split "`r?`n" | Where-Object { $_ -and $_.Trim() }
+
+    $missingTriggers = @()
+    foreach ($trg in $requiredTriggers) {
+        if ($existingTriggers -notcontains $trg) {
+            $missingTriggers += $trg
+        }
+    }
+    if ($missingTriggers.Count -gt 0) {
+        throw "Schema sanity check failed: missing required trigger(s) on ledger_entries/audit_log: $($missingTriggers -join ', ')"
+    }
+    Write-Host "  [OK] All required append-only triggers verified on ledger_entries and audit_log." -ForegroundColor Green
+
+    # 6. Run verification queries
     Write-Host "Running integrity checks on restored database..." -ForegroundColor Cyan
     $checkSql = @"
 SELECT
@@ -129,8 +207,36 @@ SELECT
 
     Write-Host $result
 
-    Write-Host "`n=== RESTORE DRILL VERIFICATION: PASS ===" -ForegroundColor Green
-    Write-Host "Database restored successfully, schema intact, and balance verified." -ForegroundColor Green
+    # 7. Check total row count across all tables
+    $totalRowsSql = @"
+SELECT
+  (SELECT COUNT(*) FROM users) +
+  (SELECT COUNT(*) FROM groups) +
+  (SELECT COUNT(*) FROM group_memberships) +
+  (SELECT COUNT(*) FROM invitations) +
+  (SELECT COUNT(*) FROM payment_submissions) +
+  (SELECT COUNT(*) FROM ledger_entries) +
+  (SELECT COUNT(*) FROM approval_requests) +
+  (SELECT COUNT(*) FROM approval_eligible_voters) +
+  (SELECT COUNT(*) FROM approval_votes) +
+  (SELECT COUNT(*) FROM bank_reconciliations) +
+  (SELECT COUNT(*) FROM audit_log) +
+  (SELECT COUNT(*) FROM idempotency_keys) +
+  (SELECT COUNT(*) FROM user_update_reads) +
+  (SELECT COUNT(*) FROM invitation_attempts) AS total_rows;
+"@
+    $totalRowsStr = docker exec $ContainerName psql -U postgres -d $TargetDb -t -A -c $totalRowsSql 2>&1
+    $totalRows = 0
+    [int]::TryParse($totalRowsStr.Trim(), [ref]$totalRows) | Out-Null
+
+    if ($totalRows -eq 0) {
+        Write-Host "`nWARNING: SCHEMA-ONLY RESTORE: the database contained no rows, so data integrity was NOT verified." -ForegroundColor Yellow
+        Write-Host "`n=== RESTORE DRILL VERIFICATION: PASS (SCHEMA-ONLY) ===" -ForegroundColor Green
+        Write-Host "Database restored successfully, schema intact and triggers verified (schema-only restore)." -ForegroundColor Green
+    } else {
+        Write-Host "`n=== RESTORE DRILL VERIFICATION: PASS ===" -ForegroundColor Green
+        Write-Host "Database restored successfully, schema intact, row counts confirmed, and balance verified." -ForegroundColor Green
+    }
 }
 catch {
     Write-Host "`n=== RESTORE DRILL VERIFICATION: FAIL ===" -ForegroundColor Red

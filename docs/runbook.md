@@ -289,6 +289,18 @@ To test database restoration locally against a throwaway PostgreSQL 17 Docker co
 .\scripts\restore-drill.ps1
 ```
 
+The script automatically executes:
+1. Provisions an isolated throwaway PostgreSQL 17 container on port 5534.
+2. Restores the dump archive without owner/privilege restrictions.
+3. **Schema Sanity Check**: Validates that all application tables declared in `prisma/schema.prisma` exist, and that append-only / truncate-guard triggers on `ledger_entries` and `audit_log` are installed and active.
+4. **Data Integrity & Balance Verification**: Checks table row counts and sums the ledger verified balance.
+
+> [!WARNING]
+> **Schema-Only Restore Warning**: If the database dump contains zero application rows (e.g. fresh staging instance or unseeded database), the script flags:
+> `WARNING: SCHEMA-ONLY RESTORE: the database contained no rows, so data integrity was NOT verified.`
+> and reports `=== RESTORE DRILL VERIFICATION: PASS (SCHEMA-ONLY) ===`. While table structures and triggers are confirmed intact, data integrity and verified balance cannot be validated without data.
+> **Recommendation**: Re-run the restore drill once the database contains real member records and financial entries to verify end-to-end data integrity.
+
 ### B. Restoring from a Downloaded Backup Artifact
 
 When disaster recovery requires restoring from a GitHub Actions backup artifact (`db-backup-<id>.zip`):
@@ -296,7 +308,9 @@ When disaster recovery requires restoring from a GitHub Actions backup artifact 
 1. Unzip the artifact to obtain `backup.dump.gpg`.
 2. Decrypt and verify using `scripts/restore-drill.ps1` directly:
    ```powershell
-   # restore-drill.ps1 auto-decrypts .gpg files (prompts for passphrase if not set in env)
+   # restore-drill.ps1 auto-decrypts .gpg files using a temporary passphrase file (no trailing newline),
+   # preventing "Bad session key" errors when decrypting archives encrypted via GitHub Actions printf '%s'.
+   # Prompts interactively if $env:BACKUP_ENCRYPTION_KEY is not set.
    .\scripts\restore-drill.ps1 -DumpFile .\backup.dump.gpg
    ```
    *Or decrypt manually before restoring:*
