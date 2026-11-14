@@ -12,12 +12,14 @@ import { createErrorHandler } from './errors.js';
 import { requestIdMiddleware } from './middleware/request-id.js';
 import { createApprovalsRouter } from './routes/approvals.js';
 import { createContributionsRouter } from './routes/contributions.js';
+import { createDashboardRouter } from './routes/dashboard.js';
 import { createGroupsRouter } from './routes/groups.js';
 import { createInvitationsRouter } from './routes/invitations.js';
 import { createMembersRouter } from './routes/members.js';
 import { createPaymentsRouter } from './routes/payments.js';
 import { createProfileRouter } from './routes/profile.js';
 import { createReconciliationsRouter } from './routes/reconciliations.js';
+import { createReportsRouter } from './routes/reports.js';
 import { createSessionRouter } from './routes/session.js';
 import { createTransactionsRouter } from './routes/transactions.js';
 
@@ -185,6 +187,20 @@ export function createApp(deps: AppDependencies): Express {
         tokenVerifier: deps.tokenVerifier,
         clock: deps.clock,
         idGenerator: deps.idGenerator,
+      }),
+    );
+    app.use(
+      createDashboardRouter({
+        prisma: deps.prisma,
+        tokenVerifier: deps.tokenVerifier,
+        clock: deps.clock,
+      }),
+    );
+    app.use(
+      createReportsRouter({
+        prisma: deps.prisma,
+        tokenVerifier: deps.tokenVerifier,
+        clock: deps.clock,
       }),
     );
   }
