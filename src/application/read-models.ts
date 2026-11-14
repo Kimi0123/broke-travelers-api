@@ -40,8 +40,8 @@ export interface SnapshotApproval {
   readonly eligibleMemberIds: readonly string[];
   readonly votes: ReadonlyArray<{
     readonly memberId: string;
-    readonly choice: string;
-    readonly at: Date;
+    readonly approve: boolean;
+    readonly votedAt: Date;
   }>;
 }
 
@@ -141,7 +141,7 @@ export async function loadGroupSnapshot(
         where: { groupId },
         include: {
           eligibleVoters: { select: { memberId: true } },
-          votes: { select: { memberId: true, choice: true, createdAt: true } },
+          votes: { select: { memberId: true, approve: true, votedAt: true } },
         },
         orderBy: { createdAt: 'desc' },
       });
@@ -273,8 +273,8 @@ export async function loadGroupSnapshot(
           eligibleMemberIds: a.eligibleVoters.map((ev) => ev.memberId),
           votes: a.votes.map((v) => ({
             memberId: v.memberId,
-            choice: v.choice,
-            at: v.createdAt,
+            approve: v.approve,
+            votedAt: v.votedAt,
           })),
         };
       });
