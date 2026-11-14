@@ -60,13 +60,19 @@ The following files were added in Task 5.7 and must be kept consistent:
 | `.github/workflows/backup.yml` | Daily encrypted `pg_dump` backup to GitHub Actions artifact (30-day retention) |
 | `docs/runbook.md` | Deployment, migration, role verification, smoke test, backup, restore procedures |
 
-### npm scripts added in Task 5.7
+### npm scripts added in Task 5.7 & 5.7d
 
 | Script | Command |
 |---|---|
+| `npm run verify` | `npm run lint && npm run format:check && npm run typecheck && npm run build && npm run test:unit` |
+| `npm run verify:all` | `npm run verify && npm run test:integration` |
 | `npm run start:prod` | `node dist/server.js` (production start) |
 | `npm run db:deploy` | `prisma migrate deploy` (apply pending migrations) |
 | `npm run db:verify-roles` | `node scripts/verify-roles.js` (assert least-privilege role) |
+
+### Verification and Final Reports
+
+Before reporting task completion, always run `npm run verify:all` and paste its output. This guarantees lint, formatting, typechecking (including `test/`), build, unit tests, and integration tests all run in order and stop at the first failure so a failing typecheck or test cannot be missed.
 
 ### Health endpoints (changed in Task 5.7)
 

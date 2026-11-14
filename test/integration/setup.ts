@@ -199,23 +199,23 @@ export interface SeededGroupFixture {
     dueDay: number;
   };
   readonly owner: {
-    user: { id: string; email: string };
+    user: { id: string; email: string; firebaseUid: string };
     membership: { id: string };
   };
   readonly secondTreasurer: {
-    user: { id: string; email: string };
+    user: { id: string; email: string; firebaseUid: string };
     membership: { id: string };
   };
   readonly member1: {
-    user: { id: string; email: string };
+    user: { id: string; email: string; firebaseUid: string };
     membership: { id: string };
   };
   readonly member2: {
-    user: { id: string; email: string };
+    user: { id: string; email: string; firebaseUid: string };
     membership: { id: string };
   };
   readonly member3: {
-    user: { id: string; email: string };
+    user: { id: string; email: string; firebaseUid: string };
     membership: { id: string };
   };
 }
@@ -342,13 +342,18 @@ export async function seedStandardGroup(
   return {
     group: { id: groupId, name, expectedPaisa, dueDay },
     owner: {
-      user: { id: ownerUserId, email: `owner-${ownerUserId}@example.com` },
+      user: {
+        id: ownerUserId,
+        email: `owner-${ownerUserId}@example.com`,
+        firebaseUid: `fb-${ownerUserId}`,
+      },
       membership: { id: ownerMemberId },
     },
     secondTreasurer: {
       user: {
         id: treasurer2UserId,
         email: `treasurer-${treasurer2UserId}@example.com`,
+        firebaseUid: `fb-${treasurer2UserId}`,
       },
       membership: { id: treasurer2MemberId },
     },
@@ -356,6 +361,7 @@ export async function seedStandardGroup(
       user: {
         id: member1UserId,
         email: `member1-${member1UserId}@example.com`,
+        firebaseUid: `fb-${member1UserId}`,
       },
       membership: { id: member1Id },
     },
@@ -363,6 +369,7 @@ export async function seedStandardGroup(
       user: {
         id: member2UserId,
         email: `member2-${member2UserId}@example.com`,
+        firebaseUid: `fb-${member2UserId}`,
       },
       membership: { id: member2Id },
     },
@@ -370,6 +377,7 @@ export async function seedStandardGroup(
       user: {
         id: member3UserId,
         email: `member3-${member3UserId}@example.com`,
+        firebaseUid: `fb-${member3UserId}`,
       },
       membership: { id: member3Id },
     },

@@ -101,11 +101,13 @@ Express 5 REST API with Firebase ID token authentication, user session provision
 ## Testing & Quality
 
 ```bash
-npm run test:unit         # Unit & 135 Dart golden vector tests (226 tests, 1 skipped)
-npm run test:integration  # Real PostgreSQL integration tests (146 tests across 28 suites)
+npm run verify            # Run lint, format:check, typecheck, build, and test:unit in order
+npm run verify:all        # Full verification: runs verify + test:integration against PostgreSQL
+npm run test:unit         # Unit & Dart golden vector tests (242 tests, 1 skipped)
+npm run test:integration  # Real PostgreSQL integration tests (150 tests across 28 suites)
 npm run lint              # ESLint check
 npm run format:check      # Prettier format check
-npm run typecheck         # TypeScript compiler check
+npm run typecheck         # TypeScript compiler check (includes test/ directory)
 npm run build             # Build TypeScript output to dist/
 ```
 *(Note: `npm ci` generates the Prisma client automatically; run `npm run prisma:generate` after editing `prisma/schema.prisma`).*

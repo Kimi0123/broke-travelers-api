@@ -20,6 +20,8 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:all": "npm run test:unit && npm run test:integration",
     "test": "npm run test:unit",
+    "verify": "npm run lint && npm run format:check && npm run typecheck && npm run build && npm run test:unit",
+    "verify:all": "npm run verify && npm run test:integration",
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f db",
