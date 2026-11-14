@@ -79,7 +79,17 @@ export function createTransactionsRouter(deps: TransactionsRouteDeps): Router {
         throw new HttpError(404, 'transaction_not_found');
       }
 
-      const result = await service.getTransaction({ groupId, transactionId });
+      const result = await service.getTransaction({
+        groupId,
+        transactionId,
+        viewer: req.membership
+          ? {
+              memberId: req.membership.membershipId,
+              isTreasurer: req.membership.isTreasurer,
+              isOwner: req.membership.isOwner,
+            }
+          : undefined,
+      });
       res.status(200).json(result);
     },
   );

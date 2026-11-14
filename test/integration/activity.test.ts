@@ -167,12 +167,12 @@ describe('Activity & Transactions Keyset Pagination HTTP Integration', () => {
     expect(ledgerRes1.body.source).toBe('ledger');
     expect(ledgerRes1.body.rawId).toBe(ledgerId);
 
-    // Raw UUID lookup also succeeds
+    // Bare UUID lookup fails with 404 transaction_not_found
     const ledgerRes2 = await request(app)
       .get(`/v1/groups/${fixture.group.id}/transactions/${ledgerId}`)
       .set('Authorization', `Bearer ${token}`);
-    expect(ledgerRes2.status).toBe(200);
-    expect(ledgerRes2.body.id).toBe(`ledger:${ledgerId}`);
+    expect(ledgerRes2.status).toBe(404);
+    expect(ledgerRes2.body.error.code).toBe('transaction_not_found');
 
     // 2. Submission entry
     const subId = generateId();
@@ -197,6 +197,108 @@ describe('Activity & Transactions Keyset Pagination HTTP Integration', () => {
     expect(subRes.body.source).toBe('submission');
     expect(subRes.body.rawId).toBe(subId);
     expect(subRes.body.status).toBe('pendingVerification');
+
+    // 3. Stale submission link after verification resolves to the posted ledger entry
+    const verifiedLedgerId = generateId();
+    await directPrisma.ledgerEntry.create({
+      data: {
+        id: verifiedLedgerId,
+        groupId: fixture.group.id,
+        kind: 'contribution',
+        title: "Chirag Member's contribution",
+        magnitudePaisa: 500000n,
+        occurredAt: new Date('2026-11-02T10:00:00.000Z'),
+        postedAt: new Date('2026-11-02T11:00:00.000Z'),
+        actorMemberId: fixture.owner.membership.id,
+        memberId: fixture.member1.membership.id,
+        periodMonth: new Date('2026-11-01T00:00:00.000Z'),
+        paymentMethod: 'esewa',
+      },
+    });
+    const verifiedSubId = generateId();
+    await directPrisma.paymentSubmission.create({
+      data: {
+        id: verifiedSubId,
+        groupId: fixture.group.id,
+        memberId: fixture.member1.membership.id,
+        periodMonth: new Date('2026-11-01T00:00:00.000Z'),
+        amountPaisa: 500000n,
+        paymentMethod: 'esewa',
+        reference: 'ESW-VERIFIED-TEST',
+        status: 'verified',
+        submittedAt: new Date('2026-11-02T10:00:00.000Z'),
+        postedLedgerEntryId: verifiedLedgerId,
+      },
+    });
+
+    const resolvedRes = await request(app)
+      .get(
+        `/v1/groups/${fixture.group.id}/transactions/submission:${verifiedSubId}`,
+      )
+      .set('Authorization', `Bearer ${token}`);
+    expect(resolvedRes.status).toBe(200);
+    expect(resolvedRes.body.id).toBe(`ledger:${verifiedLedgerId}`);
+    expect(resolvedRes.body.source).toBe('ledger');
+    expect(resolvedRes.body.rawId).toBe(verifiedLedgerId);
+    expect(resolvedRes.body.status).toBe('verified');
+
+    // 4. Rejected submission visibility rules
+    const rejectedSubId = generateId();
+    await directPrisma.paymentSubmission.create({
+      data: {
+        id: rejectedSubId,
+        groupId: fixture.group.id,
+        memberId: fixture.member1.membership.id,
+        periodMonth: new Date('2026-11-01T00:00:00.000Z'),
+        amountPaisa: 500000n,
+        paymentMethod: 'esewa',
+        reference: 'ESW-REJECTED-TEST',
+        status: 'rejected',
+        rejectionReason: 'wrongAmount',
+        submittedAt: new Date('2026-11-02T10:00:00.000Z'),
+      },
+    });
+
+    const submitterToken = FakeTokenVerifier.createToken(
+      `fb-${fixture.member1.user.id}`,
+      fixture.member1.user.email,
+      true,
+    );
+    const treasurerToken = token; // Owner is treasurer
+    const otherMemberToken = FakeTokenVerifier.createToken(
+      `fb-${fixture.member2.user.id}`,
+      fixture.member2.user.email,
+      true,
+    );
+
+    // Submitter can view their own rejected submission
+    const submitterViewRes = await request(app)
+      .get(
+        `/v1/groups/${fixture.group.id}/transactions/submission:${rejectedSubId}`,
+      )
+      .set('Authorization', `Bearer ${submitterToken}`);
+    expect(submitterViewRes.status).toBe(200);
+    expect(submitterViewRes.body.id).toBe(`submission:${rejectedSubId}`);
+    expect(submitterViewRes.body.status).toBe('rejected');
+
+    // Treasurer can view any rejected submission
+    const treasurerViewRes = await request(app)
+      .get(
+        `/v1/groups/${fixture.group.id}/transactions/submission:${rejectedSubId}`,
+      )
+      .set('Authorization', `Bearer ${treasurerToken}`);
+    expect(treasurerViewRes.status).toBe(200);
+    expect(treasurerViewRes.body.id).toBe(`submission:${rejectedSubId}`);
+    expect(treasurerViewRes.body.status).toBe('rejected');
+
+    // Another plain member receives 404 transaction_not_found
+    const otherViewRes = await request(app)
+      .get(
+        `/v1/groups/${fixture.group.id}/transactions/submission:${rejectedSubId}`,
+      )
+      .set('Authorization', `Bearer ${otherMemberToken}`);
+    expect(otherViewRes.status).toBe(404);
+    expect(otherViewRes.body.error.code).toBe('transaction_not_found');
 
     // Unknown transaction -> 404 transaction_not_found
     const missingRes = await request(app)

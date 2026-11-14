@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { PrismaClient } from '@prisma/client';
 import { PaymentsService } from '../../application/payments-service.js';
 import type { TokenVerifier } from '../../application/ports/token-verifier.js';
+import { maskPaymentReference } from '../../domain/reference-masking.js';
 import { HttpError } from '../errors.js';
 import { requireAuth, requireUser } from '../middleware/auth.js';
 import {
@@ -78,7 +79,11 @@ export function createPaymentsRouter(deps: PaymentsRouteDeps): Router {
       if (result.isReplay) {
         res.setHeader('Idempotent-Replay', 'true');
       }
-      res.status(201).json(result.submission);
+      const sub = result.submission;
+      res.status(201).json({
+        ...sub,
+        reference: sub.reference ? maskPaymentReference(sub.reference) : null,
+      });
     },
   );
 

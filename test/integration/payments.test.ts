@@ -70,6 +70,7 @@ describe('Payments HTTP Integration', () => {
     expect(res.body.amountPaisa).toBe(500000); // 5000 NPR from group configuration
     expect(res.body.status).toBe('pending');
     expect(res.body.memberId).toBe(fixture.member1.membership.id);
+    expect(res.body.reference).toBe('Ref ••••5678'); // Masked reference in 201 response
   });
 
   it('rejects client-supplied amount with 400 invalid_payment_input', async () => {

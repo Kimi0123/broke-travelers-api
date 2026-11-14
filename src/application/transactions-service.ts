@@ -69,6 +69,13 @@ export class TransactionsService {
   async getTransaction(params: {
     readonly groupId: string;
     readonly transactionId: string;
+    readonly viewer?:
+      | {
+          readonly memberId: string;
+          readonly isTreasurer: boolean;
+          readonly isOwner: boolean;
+        }
+      | undefined;
   }): Promise<ActivityItemDto> {
     return getActivityItem(this.prisma, params);
   }

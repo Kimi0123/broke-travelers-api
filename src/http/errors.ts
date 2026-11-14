@@ -225,6 +225,15 @@ export const ERROR_MESSAGES: Readonly<
     status: 409,
     message: 'This approval request has already been recorded',
   },
+  cannot_execute_own_request: {
+    status: 403,
+    message:
+      'You cannot execute your own request when another treasurer exists',
+  },
+  invalid_statement_date: {
+    status: 400,
+    message: 'Statement date is invalid or in the future',
+  },
   invalid_reconciliation_input: {
     status: 400,
     message: 'Statement date, balance, or note is invalid',

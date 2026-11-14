@@ -198,6 +198,13 @@ export async function getActivityItem(
   params: {
     readonly groupId: string;
     readonly transactionId: string;
+    readonly viewer?:
+      | {
+          readonly memberId: string;
+          readonly isTreasurer: boolean;
+          readonly isOwner: boolean;
+        }
+      | undefined;
   },
 ): Promise<ActivityItemDto> {
   const { groupId, transactionId } = params;
@@ -211,19 +218,6 @@ export async function getActivityItem(
   } else if (transactionId.startsWith('submission:')) {
     source = 'submission';
     rawId = transactionId.slice(11);
-  } else if (UUID_REGEX.test(transactionId)) {
-    // Check ledger first, then submission
-    const ledgerExists = await prisma.ledgerEntry.findFirst({
-      where: { id: transactionId, groupId },
-      select: { id: true },
-    });
-    if (ledgerExists) {
-      source = 'ledger';
-      rawId = transactionId;
-    } else {
-      source = 'submission';
-      rawId = transactionId;
-    }
   } else {
     throw new HttpError(404, 'transaction_not_found');
   }
@@ -283,8 +277,9 @@ export async function getActivityItem(
       actorMemberId: entry.actorMemberId,
     };
   } else {
-    const sub = await prisma.paymentSubmission.findFirst({
-      where: { id: rawId, groupId, postedLedgerEntryId: null },
+    // If the submission has been verified, resolve to the posted ledger entry
+    const subRaw = await prisma.paymentSubmission.findFirst({
+      where: { id: rawId, groupId },
       include: {
         member: {
           include: {
@@ -294,9 +289,32 @@ export async function getActivityItem(
       },
     });
 
-    if (!sub) {
+    if (!subRaw) {
       throw new HttpError(404, 'transaction_not_found');
     }
+
+    // If verified, redirect to the ledger entry
+    if (subRaw.postedLedgerEntryId !== null) {
+      return getActivityItem(prisma, {
+        groupId,
+        transactionId: `ledger:${subRaw.postedLedgerEntryId}`,
+        viewer: params.viewer,
+      });
+    }
+
+    // Visibility: a rejected submission is visible to its submitter and to treasurers/owner only.
+    // For any other member, submission:<uuid> of a rejected submission -> 404 (same body as unknown).
+    if (subRaw.status === 'rejected') {
+      const isSubmitter = params.viewer?.memberId === subRaw.memberId;
+      const isPrivileged = !!(
+        params.viewer?.isTreasurer || params.viewer?.isOwner
+      );
+      if (!isSubmitter && !isPrivileged) {
+        throw new HttpError(404, 'transaction_not_found');
+      }
+    }
+
+    const sub = subRaw;
 
     const amountPaisa = Number(sub.amountPaisa);
     const memberName = sub.member.user.displayName;
