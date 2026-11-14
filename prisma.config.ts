@@ -2,6 +2,9 @@
 // npm install --save-dev prisma dotenv
 import 'dotenv/config';
 import { defineConfig } from 'prisma/config';
+import { resolveDatasourceUrl } from './src/config/datasource-url.js';
+
+export { resolveDatasourceUrl };
 
 export default defineConfig({
   schema: 'prisma/schema.prisma',
@@ -9,9 +12,6 @@ export default defineConfig({
     path: 'prisma/migrations',
   },
   datasource: {
-    url:
-      process.env['DIRECT_URL'] ??
-      process.env['DATABASE_URL'] ??
-      'postgresql://api_user:api_user_local_dev_secret@localhost:5533/broke_travelers?schema=public',
+    url: resolveDatasourceUrl(process.env),
   },
 });
