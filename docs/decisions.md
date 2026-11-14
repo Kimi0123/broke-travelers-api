@@ -151,3 +151,15 @@ The `src/domain/` module contains the 1:1 pure TypeScript port of all financial,
 - The Flutter client UI (`my_payments_screen.dart:85`) rendered payment references of 4 characters or fewer in full plain text.
 - The backend API enforces privacy protection: any reference of 4 characters or fewer is strictly masked as `'Ref ••••'` to prevent leaking short credentials or transaction codes to activity feeds or non-privileged viewers. For references longer than 4 characters, it returns `'Ref ••••'` followed by the last 4 characters (e.g., `'Ref ••••3456'`).
 
+
+### 12.6 pg Driver Version and Concurrent Transaction Queries
+
+- The `@prisma/adapter-pg` package bundles its own nested `pg` (currently `^8.x`) under `node_modules/@prisma/adapter-pg/node_modules/pg`.
+- In `pg@8`, calling `client.query()` while the same underlying connection already has an in-flight query triggers a `DeprecationWarning`: *"Calling client.query() when the client is already executing a query"*. This will become a hard error in `pg@9`.
+- **Root cause**: Prisma interactive transactions (`$transaction(async tx => ...)`) pin every `tx.*` call to a **single** connection. Using `Promise.all([tx.a.findMany(...), tx.b.findMany(...)])` submits two queries concurrently on that one connection — the second query lands while the first is still in flight, triggering the warning.
+- **Fix applied (Task 5.7d)**: All `Promise.all` calls on a Prisma transaction client `tx` inside `src/application/` were converted to sequential `await` calls:
+  - `approvals-service.ts` — `createApproval`: replaced single multi-include `tx.approvalRequest.create` with a helper `loadApprovalWithRelations` that runs sub-queries sequentially.
+  - `payments-service.ts` — `submitPayment`: sequential `await tx.ledgerEntry.findMany` then `await tx.paymentSubmission.findMany`.
+  - `members-service.ts` — role-change transaction: sequential ledger + submission reads.
+- **Rule**: never use `Promise.all` on a Prisma transaction client `tx`. Concurrent reads are only safe on the pool client (`this.prisma`), which picks separate pooled connections for each query.
+- **Upgrading to pg@9**: before upgrading, run the full integration suite (`npm run test:integration`) and confirm the new hard error is not triggered. No `Promise.all` on `tx` should remain in `src/`.

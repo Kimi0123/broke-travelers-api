@@ -42,6 +42,7 @@ Backend REST API for Broke Travelers (Node.js, Express, TypeScript, PostgreSQL, 
 
 - TypeScript strict mode enabled (`"strict": true`). No `any` allowed; use explicit types, unknown with narrowing, or discriminated unions.
 - Validate all incoming HTTP payloads at the boundary using a schema validator before passing data to application services.
+- **Never run queries concurrently on one transaction client**: do not use `Promise.all` on a Prisma transaction client `tx`. Prisma interactive transactions pin every `tx.*` call to a single underlying pg connection; issuing two queries concurrently on that connection triggers a pg deprecation that becomes a hard error in pg@9. Sequential `await` calls are required. Concurrent `Promise.all` is safe on the pool client `this.prisma` (separate connections per query).
 
 ## Deployment Artifacts (Task 5.7)
 

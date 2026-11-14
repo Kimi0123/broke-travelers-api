@@ -78,16 +78,14 @@ export class MembersService {
   }
 
   private async loadAllEntries(groupId: string): Promise<MappedLedgerEntry[]> {
-    const [ledgerRows, submissionRows] = await Promise.all([
-      this.prisma.ledgerEntry.findMany({
-        where: { groupId },
-        orderBy: { seq: 'asc' },
-      }),
-      this.prisma.paymentSubmission.findMany({
-        where: { groupId, postedLedgerEntryId: null },
-        orderBy: { seq: 'asc' },
-      }),
-    ]);
+    const ledgerRows = await this.prisma.ledgerEntry.findMany({
+      where: { groupId },
+      orderBy: { seq: 'asc' },
+    });
+    const submissionRows = await this.prisma.paymentSubmission.findMany({
+      where: { groupId, postedLedgerEntryId: null },
+      orderBy: { seq: 'asc' },
+    });
 
     const mappedLedger = ledgerRows.map(mapLedgerEntryRow);
     const mappedSubmissions = submissionRows.map(mapSubmissionToLedgerEntry);
@@ -394,16 +392,14 @@ export class MembersService {
       const nptNow = utcInstantToNptWallClock(now);
       const currentPeriodStart = monthStart(nptNow);
 
-      const [ledgerRows, submissionRows] = await Promise.all([
-        tx.ledgerEntry.findMany({
-          where: { groupId },
-          orderBy: { seq: 'asc' },
-        }),
-        tx.paymentSubmission.findMany({
-          where: { groupId, postedLedgerEntryId: null },
-          orderBy: { seq: 'asc' },
-        }),
-      ]);
+      const ledgerRows = await tx.ledgerEntry.findMany({
+        where: { groupId },
+        orderBy: { seq: 'asc' },
+      });
+      const submissionRows = await tx.paymentSubmission.findMany({
+        where: { groupId, postedLedgerEntryId: null },
+        orderBy: { seq: 'asc' },
+      });
       const entries = sortBySeqAsc([
         ...ledgerRows.map(mapLedgerEntryRow),
         ...submissionRows.map(mapSubmissionToLedgerEntry),

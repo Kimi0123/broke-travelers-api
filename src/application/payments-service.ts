@@ -264,17 +264,15 @@ export class PaymentsService {
         throw new HttpError(403, 'forbidden');
       }
 
-      // Load all entries to determine period validity and obligation status
-      const [ledgerRows, submissionRows] = await Promise.all([
-        tx.ledgerEntry.findMany({
-          where: { groupId },
-          orderBy: { seq: 'asc' },
-        }),
-        tx.paymentSubmission.findMany({
-          where: { groupId, postedLedgerEntryId: null },
-          orderBy: { seq: 'asc' },
-        }),
-      ]);
+      // Load all entries sequentially on transaction client (avoids concurrent queries on single connection)
+      const ledgerRows = await tx.ledgerEntry.findMany({
+        where: { groupId },
+        orderBy: { seq: 'asc' },
+      });
+      const submissionRows = await tx.paymentSubmission.findMany({
+        where: { groupId, postedLedgerEntryId: null },
+        orderBy: { seq: 'asc' },
+      });
 
       const mappedLedger = ledgerRows.map(mapLedgerEntryRow);
       const mappedSubmissions = submissionRows.map(mapSubmissionToLedgerEntry);

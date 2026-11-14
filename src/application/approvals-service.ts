@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient, Prisma } from '@prisma/client';
 import {
   isApprovalExpired,
   resolveOpenStatus,
@@ -226,6 +226,41 @@ export class ApprovalsService {
     };
   }
 
+  private async loadApprovalWithRelations(
+    tx: Prisma.TransactionClient,
+    approvalId: string,
+    groupId: string,
+  ) {
+    const req = await tx.approvalRequest.findFirst({
+      where: { id: approvalId, groupId },
+    });
+    if (!req) return null;
+
+    const eligibleVoters = await tx.approvalEligibleVoter.findMany({
+      where: { requestId: req.id },
+    });
+    const votes = await tx.approvalVote.findMany({
+      where: { requestId: req.id },
+      include: {
+        member: {
+          include: { user: { select: { displayName: true } } },
+        },
+      },
+      orderBy: { votedAt: 'asc' },
+    });
+    const requesterMember = await tx.groupMembership.findUnique({
+      where: { id: req.requesterMemberId },
+      include: { user: { select: { displayName: true } } },
+    });
+
+    return {
+      ...req,
+      eligibleVoters,
+      votes,
+      requesterMember,
+    };
+  }
+
   async createApproval(
     params: CreateApprovalParams,
   ): Promise<{ approval: ApprovalRequestDto; isReplay: boolean }> {
@@ -374,15 +409,6 @@ export class ApprovalsService {
             create: eligibleVoters.map((ev) => ({ memberId: ev.id })),
           },
         },
-        include: {
-          requesterMember: {
-            include: { user: { select: { displayName: true } } },
-          },
-          eligibleVoters: true,
-          votes: {
-            include: { member: { include: { user: true } } },
-          },
-        },
       });
 
       // 8. Audit log: approval.created
@@ -398,7 +424,19 @@ export class ApprovalsService {
         },
       });
 
-      const dto = this.mapToDto(created, memberId, now);
+      const requesterMember = activeMembers.find((m) => m.id === memberId);
+      const dto = this.mapToDto(
+        {
+          ...created,
+          requesterMember: requesterMember
+            ? { user: { displayName: requesterMember.user.displayName } }
+            : null,
+          eligibleVoters: eligibleVoters.map((ev) => ({ memberId: ev.id })),
+          votes: [],
+        },
+        memberId,
+        now,
+      );
 
       await saveIdempotency(tx, {
         idempotencyKey,
@@ -522,22 +560,7 @@ export class ApprovalsService {
         return { approval: idempotency.existing.data, isReplay: true };
       }
 
-      const req = await tx.approvalRequest.findFirst({
-        where: { id: approvalId, groupId },
-        include: {
-          eligibleVoters: true,
-          votes: {
-            include: {
-              member: {
-                include: { user: { select: { displayName: true } } },
-              },
-            },
-          },
-          requesterMember: {
-            include: { user: { select: { displayName: true } } },
-          },
-        },
-      });
+      const req = await this.loadApprovalWithRelations(tx, approvalId, groupId);
 
       if (!req) {
         throw new HttpError(404, 'approval_not_found');
@@ -640,23 +663,10 @@ export class ApprovalsService {
       }
 
       // Reload updated request with votes
-      const updated = await tx.approvalRequest.findFirstOrThrow({
-        where: { id: req.id },
-        include: {
-          eligibleVoters: true,
-          votes: {
-            include: {
-              member: {
-                include: { user: { select: { displayName: true } } },
-              },
-            },
-            orderBy: { votedAt: 'asc' },
-          },
-          requesterMember: {
-            include: { user: { select: { displayName: true } } },
-          },
-        },
-      });
+      const updated = await this.loadApprovalWithRelations(tx, req.id, groupId);
+      if (!updated) {
+        throw new HttpError(404, 'approval_not_found');
+      }
 
       const dto = this.mapToDto(updated, memberId, now);
 
@@ -696,22 +706,7 @@ export class ApprovalsService {
         return { approval: idempotency.existing.data, isReplay: true };
       }
 
-      const req = await tx.approvalRequest.findFirst({
-        where: { id: approvalId, groupId },
-        include: {
-          eligibleVoters: true,
-          votes: {
-            include: {
-              member: {
-                include: { user: { select: { displayName: true } } },
-              },
-            },
-          },
-          requesterMember: {
-            include: { user: { select: { displayName: true } } },
-          },
-        },
-      });
+      const req = await this.loadApprovalWithRelations(tx, approvalId, groupId);
 
       if (!req) {
         throw new HttpError(404, 'approval_not_found');
@@ -750,22 +745,10 @@ export class ApprovalsService {
         },
       });
 
-      const updated = await tx.approvalRequest.findFirstOrThrow({
-        where: { id: req.id },
-        include: {
-          eligibleVoters: true,
-          votes: {
-            include: {
-              member: {
-                include: { user: { select: { displayName: true } } },
-              },
-            },
-          },
-          requesterMember: {
-            include: { user: { select: { displayName: true } } },
-          },
-        },
-      });
+      const updated = await this.loadApprovalWithRelations(tx, req.id, groupId);
+      if (!updated) {
+        throw new HttpError(404, 'approval_not_found');
+      }
 
       const dto = this.mapToDto(updated, memberId, now);
 
@@ -824,22 +807,7 @@ export class ApprovalsService {
         throw new HttpError(403, 'forbidden');
       }
 
-      const req = await tx.approvalRequest.findFirst({
-        where: { id: approvalId, groupId },
-        include: {
-          eligibleVoters: true,
-          votes: {
-            include: {
-              member: {
-                include: { user: { select: { displayName: true } } },
-              },
-            },
-          },
-          requesterMember: {
-            include: { user: { select: { displayName: true } } },
-          },
-        },
-      });
+      const req = await this.loadApprovalWithRelations(tx, approvalId, groupId);
 
       if (!req) {
         throw new HttpError(404, 'approval_not_found');
@@ -933,23 +901,10 @@ export class ApprovalsService {
         },
       });
 
-      const updated = await tx.approvalRequest.findFirstOrThrow({
-        where: { id: req.id },
-        include: {
-          eligibleVoters: true,
-          votes: {
-            include: {
-              member: {
-                include: { user: { select: { displayName: true } } },
-              },
-            },
-            orderBy: { votedAt: 'asc' },
-          },
-          requesterMember: {
-            include: { user: { select: { displayName: true } } },
-          },
-        },
-      });
+      const updated = await this.loadApprovalWithRelations(tx, req.id, groupId);
+      if (!updated) {
+        throw new HttpError(404, 'approval_not_found');
+      }
 
       const dto = this.mapToDto(updated, memberId, now);
 
