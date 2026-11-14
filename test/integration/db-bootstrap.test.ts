@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runBootstrap } from '../../scripts/db-bootstrap.js';
 import {
   closeAllTestClients,
@@ -9,6 +9,17 @@ import {
 describe('Managed DB Bootstrap Script (Integration)', () => {
   const directPrisma = getTestDirectPrisma();
   const testRole = 'api_user_bootstrap_test';
+
+  beforeAll(async () => {
+    try {
+      await directPrisma.$executeRawUnsafe(
+        `REVOKE CONNECT ON DATABASE broke_travelers_test FROM ${testRole};`,
+      );
+      await directPrisma.$executeRawUnsafe(`DROP ROLE IF EXISTS ${testRole};`);
+    } catch {
+      // ignore if role doesn't exist
+    }
+  });
 
   afterAll(async () => {
     try {

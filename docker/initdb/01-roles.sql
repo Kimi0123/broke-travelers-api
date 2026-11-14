@@ -4,10 +4,12 @@
 -- 1. Create Application and Migration Roles
 DO $$
 BEGIN
+  -- CREATEROLE is needed so the bootstrap integration test can create a throwaway role;
+  -- mirrors the Neon project owner (which has CREATEROLE); local/CI environment only.
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'migration_owner') THEN
-    CREATE ROLE migration_owner WITH LOGIN CREATEDB PASSWORD 'migration_owner_local_dev_secret';
+    CREATE ROLE migration_owner WITH LOGIN CREATEDB CREATEROLE PASSWORD 'migration_owner_local_dev_secret';
   ELSE
-    ALTER ROLE migration_owner CREATEDB;
+    ALTER ROLE migration_owner CREATEDB CREATEROLE;
   END IF;
 
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'api_user') THEN
