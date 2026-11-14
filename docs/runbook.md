@@ -19,13 +19,13 @@
 
 | Variable | Description | Source |
 |---|---|---|
-| `DATABASE_URL` | Pooled PostgreSQL connection string (for runtime traffic) | Platform Secret |
-| `DIRECT_URL` | Direct (non-pooled) PostgreSQL connection string (for migrations & role setup) | Platform Secret |
-| `FIREBASE_PROJECT_ID` | Firebase project ID for server-side token verification | Platform Secret |
-| `FIREBASE_SERVICE_ACCOUNT_JSON` | Raw JSON string **or** base64-encoded service account key | Platform Secret |
-| `TRUST_PROXY_HOPS` | Number of reverse proxy hops (e.g. `1` on Render) | Fixed / Env |
-| `REQUIRE_VERIFIED_EMAIL` | Require email verification before API access (`true` or `false`) | Fixed / Env |
-| `LOG_LEVEL` | Application logging verbosity (`info`, `warn`, or `error`) | Fixed / Env |
+| `DATABASE_URL` | Pooled PostgreSQL connection string (for runtime traffic) | Platform Secret (Render / .env) |
+| `DIRECT_URL` | Direct (non-pooled) connection string (for developer migrations & role setup; NOT set on Render) | Developer Session |
+| `FIREBASE_PROJECT_ID` | Firebase project ID for server-side token verification | Platform Secret (Render) |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | Raw JSON string **or** base64-encoded service account key | Platform Secret (Render) |
+| `TRUST_PROXY_HOPS` | Number of reverse proxy hops (configured as `1` in `render.yaml`) | render.yaml / Env |
+| `REQUIRE_VERIFIED_EMAIL` | Require email verification (`false` in `render.yaml` for staging; `true` once UI is ready) | render.yaml / Env |
+| `LOG_LEVEL` | Application logging verbosity (`info` in `render.yaml`) | render.yaml / Env |
 | `BACKUP_DATABASE_URL` | Direct PostgreSQL connection string for daily backup job | GitHub Secret |
 | `BACKUP_ENCRYPTION_KEY` | GPG symmetric passphrase for AES256 backup encryption | GitHub Secret |
 
@@ -130,18 +130,15 @@ Migrations are forward-only and idempotent; already-applied migrations are safel
 
 ## 5. Deploying to Render
 
-The service is configured in `render.yaml` at the repository root.
+The service is configured in `render.yaml` at the repository root. The build command is `npm ci --include=dev && npm run build` (ensuring devDependencies like `typescript` and `prisma` CLI are available despite `NODE_ENV=production`).
 
 1. Connect your GitHub repository to your Render account.
 2. Render detects `render.yaml` and provisions the web service in `singapore`.
-3. In the Render Dashboard under **Environment**, configure:
+3. In the Render Dashboard under **Environment**, configure the secret variables (the remaining variables are provided by `render.yaml`):
    - `DATABASE_URL`: The **pooled** connection URL using `api_user` (e.g. `postgresql://api_user:...@ep-...-pooler.../neondb?sslmode=require`).
-   - `DIRECT_URL`: The **direct** connection URL for migrations.
    - `FIREBASE_PROJECT_ID`: Your Firebase project ID.
-   - `FIREBASE_SERVICE_ACCOUNT_JSON`: Your Firebase service account credentials JSON.
-   - `TRUST_PROXY_HOPS`: `1`
-   - `REQUIRE_VERIFIED_EMAIL`: `true` (or `false` for staging).
-   - `LOG_LEVEL`: `info`
+   - `FIREBASE_SERVICE_ACCOUNT_JSON`: Your Firebase service account credentials JSON (raw JSON or base64-encoded).
+   *(Note: `DIRECT_URL` is intentionally omitted from Render as runtime traffic only uses `DATABASE_URL`; migrations run from the developer machine. `REQUIRE_VERIFIED_EMAIL` defaults to `'false'` in `render.yaml` for staging until the client implements an email-verification screen).*
 4. Deploy the service.
 5. Render performs health checks against `GET /v1/health/ready`. When this endpoint returns `200 { status: 'ready' }`, traffic is routed to the new deployment.
 

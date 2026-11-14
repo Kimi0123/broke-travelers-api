@@ -7,6 +7,8 @@ services:
     region: singapore
     plan: free
     branch: main
+    # NODE_ENV=production makes npm omit devDependencies by default; --include=dev is required
+    # so that build tools (typescript and prisma CLI for 'prisma generate') are installed during build.
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm run start:prod
     healthCheckPath: /v1/health/ready
@@ -19,12 +21,15 @@ services:
         value: 10000
       - key: DATABASE_URL
         sync: false
+      # DIRECT_URL is intentionally absent: runtime reads only DATABASE_URL (pooled);
+      # migrations and role setup run directly from the developer machine.
       - key: FIREBASE_PROJECT_ID
         sync: false
       - key: FIREBASE_SERVICE_ACCOUNT_JSON
         sync: false
       - key: TRUST_PROXY_HOPS
         value: '1'
+      # Staging value: set to 'true' once the Flutter app has an email-verification screen.
       - key: REQUIRE_VERIFIED_EMAIL
         value: 'false'
       - key: LOG_LEVEL

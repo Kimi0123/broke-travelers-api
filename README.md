@@ -173,14 +173,12 @@ npm run db:migrate
 
 The service ships with `render.yaml` for one-click Render deployment:
 
-- **Build**: `npm ci && npm run build`
+- **Build**: `npm ci --include=dev && npm run build`
 - **Start**: `npm run start:prod` (`node dist/server.js`)
 - **Health check**: `GET /v1/health/ready` (DB connectivity verified)
 - **Region**: Singapore (configurable in `render.yaml`)
 
-Set all required environment variables (`DATABASE_URL`, `FIREBASE_PROJECT_ID`,
-`FIREBASE_SERVICE_ACCOUNT_JSON`, `TRUST_PROXY_HOPS`, `REQUIRE_VERIFIED_EMAIL`, `LOG_LEVEL`) in
-the Render dashboard. See [`docs/runbook.md`](docs/runbook.md) for the full list.
+Configure secret environment variables (`DATABASE_URL`, `FIREBASE_PROJECT_ID`, `FIREBASE_SERVICE_ACCOUNT_JSON`) in the Render dashboard. Other variables (`TRUST_PROXY_HOPS`, `REQUIRE_VERIFIED_EMAIL` set to `'false'` for staging, `LOG_LEVEL`) are declared directly in `render.yaml`. `DIRECT_URL` is not required on Render since migrations are run from the developer machine. See [`docs/runbook.md`](docs/runbook.md) for details.
 
 ### Docker
 
