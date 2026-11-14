@@ -173,7 +173,7 @@ describe('Dashboard & Reports HTTP Integration Suite', () => {
       expect(body.lastReconciliationStatus).toBe('matched');
     });
 
-    it('enforces privacy: plain member sees pendingAmountPaisa as 0 when they have none pending', async () => {
+    it('plain member sees group-wide pendingAmountPaisa matching Flutter Home', async () => {
       const fixture: ReportFixture = await seedReportFixture(directPrisma);
 
       // Sita is a regular member with a verified payment and NO pending payments
@@ -188,9 +188,9 @@ describe('Dashboard & Reports HTTP Integration Suite', () => {
         .set('Authorization', `Bearer ${sitaToken}`);
 
       expect(res.status).toBe(200);
-      // Plain member sees their own pending only (0), NOT Hari's pending 700
-      expect(res.body.pendingAmountPaisa).toBe(0);
-      // But verified balance is identical (730000)
+      // Group-wide pending total (one number, no names) is visible to all active members (70000)
+      expect(res.body.pendingAmountPaisa).toBe(70000);
+      // And verified balance is identical (730000)
       expect(res.body.verifiedBalancePaisa).toBe(730000);
     });
 
@@ -499,7 +499,8 @@ describe('Dashboard & Reports HTTP Integration Suite', () => {
         0,
       );
       const sumPending = b.rows.reduce(
-        (acc: number, r: { pendingPaisa: number }) => acc + r.pendingPaisa,
+        (acc: number, r: { pendingPaisa: number | null }) =>
+          acc + (r.pendingPaisa ?? 0),
         0,
       );
       const sumOutstanding = b.rows.reduce(
@@ -519,7 +520,7 @@ describe('Dashboard & Reports HTTP Integration Suite', () => {
       expect(b.outstandingTotalPaisa).toBe(70000);
     });
 
-    it('masks other members pending amounts to 0 for plain members (Sita)', async () => {
+    it('masks other members pending amounts to null for plain members (Sita)', async () => {
       const fixture: ReportFixture = await seedReportFixture(directPrisma);
       const sitaToken = FakeTokenVerifier.createToken(
         fixture.sita.user.firebaseUid,
@@ -534,12 +535,130 @@ describe('Dashboard & Reports HTTP Integration Suite', () => {
       expect(res.status).toBe(200);
       const b = res.body;
 
-      // Plain member Sita should NOT see Hari's pending amount (masked to 0)
+      // Plain member Sita should NOT see Hari's pending amount (null, never 0), but status is visible
       const hariRow = b.rows.find(
         (r: { memberId: string }) => r.memberId === fixture.hari.membership.id,
       );
-      expect(hariRow.pendingPaisa).toBe(0);
+      expect(hariRow.pendingPaisa).toBeNull();
+      expect(hariRow.status).toBe('pendingVerification');
+
+      // Sita sees her own row with pendingPaisa: 0
+      const sitaRow = b.rows.find(
+        (r: { memberId: string }) => r.memberId === fixture.sita.membership.id,
+      );
+      expect(sitaRow.pendingPaisa).toBe(0);
+
+      // Plain member's pendingTotalPaisa is their own pending sum (0 for Sita)
       expect(b.pendingTotalPaisa).toBe(0);
+    });
+
+    it('shows pending amount to the member themself (Hari)', async () => {
+      const fixture: ReportFixture = await seedReportFixture(directPrisma);
+      const hariToken = FakeTokenVerifier.createToken(
+        fixture.hari.user.firebaseUid,
+        fixture.hari.user.email,
+        true,
+      );
+
+      const res = await request(app)
+        .get(`/v1/groups/${fixture.group.id}/reports/members?month=2026-11`)
+        .set('Authorization', `Bearer ${hariToken}`);
+
+      expect(res.status).toBe(200);
+      const b = res.body;
+
+      // Hari sees their own pending amount (70000) and status
+      const hariRow = b.rows.find(
+        (r: { memberId: string }) => r.memberId === fixture.hari.membership.id,
+      );
+      expect(hariRow.pendingPaisa).toBe(70000);
+      expect(hariRow.status).toBe('pendingVerification');
+
+      // Hari does not see other members' pending amounts (masked to null)
+      const sitaRow = b.rows.find(
+        (r: { memberId: string }) => r.memberId === fixture.sita.membership.id,
+      );
+      expect(sitaRow.pendingPaisa).toBeNull();
+
+      // Hari's totals row shows Hari's own pending total (70000)
+      expect(b.pendingTotalPaisa).toBe(70000);
+    });
+
+    it('shows pending amount to a treasurer who is not owner', async () => {
+      const fixture: ReportFixture = await seedReportFixture(directPrisma);
+
+      // Promote Ram to treasurer (isOwner: false, isTreasurer: true)
+      await directPrisma.groupMembership.update({
+        where: { id: fixture.ram.membership.id },
+        data: { isTreasurer: true },
+      });
+
+      const ramToken = FakeTokenVerifier.createToken(
+        fixture.ram.user.firebaseUid,
+        fixture.ram.user.email,
+        true,
+      );
+
+      const res = await request(app)
+        .get(`/v1/groups/${fixture.group.id}/reports/members?month=2026-11`)
+        .set('Authorization', `Bearer ${ramToken}`);
+
+      expect(res.status).toBe(200);
+      const b = res.body;
+
+      // Ram (treasurer only) sees Hari's pending amount (70000)
+      const hariRow = b.rows.find(
+        (r: { memberId: string }) => r.memberId === fixture.hari.membership.id,
+      );
+      expect(hariRow.pendingPaisa).toBe(70000);
+      expect(hariRow.status).toBe('pendingVerification');
+
+      // Ram sees all members' pending amounts (0 for Sita, Nirvan, Ram)
+      const sitaRow = b.rows.find(
+        (r: { memberId: string }) => r.memberId === fixture.sita.membership.id,
+      );
+      expect(sitaRow.pendingPaisa).toBe(0);
+
+      // Group-wide pending total is visible to treasurer
+      expect(b.pendingTotalPaisa).toBe(70000);
+    });
+
+    it('shows pending amount to an owner who is not treasurer', async () => {
+      const fixture: ReportFixture = await seedReportFixture(directPrisma);
+
+      // Demote Nirvan from treasurer (isOwner: true, isTreasurer: false)
+      // and make Ram treasurer so the group still has at least one treasurer
+      await directPrisma.groupMembership.update({
+        where: { id: fixture.ram.membership.id },
+        data: { isTreasurer: true },
+      });
+      await directPrisma.groupMembership.update({
+        where: { id: fixture.nirvan.membership.id },
+        data: { isTreasurer: false },
+      });
+
+      const nirvanToken = FakeTokenVerifier.createToken(
+        fixture.nirvan.user.firebaseUid,
+        fixture.nirvan.user.email,
+        true,
+      );
+
+      const res = await request(app)
+        .get(`/v1/groups/${fixture.group.id}/reports/members?month=2026-11`)
+        .set('Authorization', `Bearer ${nirvanToken}`);
+
+      expect(res.status).toBe(200);
+      const b = res.body;
+
+      // Nirvan (owner only) sees Hari's pending amount (70000)
+      const hariRow = b.rows.find(
+        (r: { memberId: string }) => r.memberId === fixture.hari.membership.id,
+      );
+      expect(hariRow.pendingPaisa).toBe(70000);
+      expect(hariRow.status).toBe('pendingVerification');
+
+      // Group-wide pending total is visible to owner
+      expect(b.pendingTotalPaisa).toBe(70000);
     });
   });
 

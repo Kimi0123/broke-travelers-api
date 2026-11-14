@@ -37,7 +37,7 @@ export const memberReportRowSchema = z.object({
   name: z.string(),
   expectedPaisa: z.number().int().nonnegative(),
   verifiedPaisa: z.number().int().nonnegative(),
-  pendingPaisa: z.number().int().nonnegative(),
+  pendingPaisa: z.number().int().nonnegative().nullable(),
   outstandingPaisa: z.number().int().nonnegative(),
   status: z.enum([
     'notSubmitted',

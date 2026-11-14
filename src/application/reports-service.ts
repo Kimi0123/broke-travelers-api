@@ -43,7 +43,7 @@ export interface MemberReportRowDto {
   readonly name: string;
   readonly expectedPaisa: number;
   readonly verifiedPaisa: number;
-  readonly pendingPaisa: number;
+  readonly pendingPaisa: number | null;
   readonly outstandingPaisa: number;
   readonly status: PaymentStatus;
 }
@@ -270,10 +270,10 @@ export async function getMemberReport(
   let viewerPendingTotal = ZERO_PAISA;
   const rows: MemberReportRowDto[] = report.rows.map((row) => {
     const isSelf = row.memberId === viewerMemberId;
-    let pendingPaisa = row.pendingPaisa;
+    let pendingPaisa: number | null = row.pendingPaisa;
 
     if (!canSeeOtherPending && !isSelf) {
-      pendingPaisa = ZERO_PAISA;
+      pendingPaisa = null;
     }
 
     if (isSelf) {

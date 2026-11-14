@@ -644,7 +644,7 @@ Read-only derivations loaded in one `REPEATABLE READ` snapshot. Financial comput
 - **Replaces**: `DashboardRepository.getDashboardSummary`
 - **Auth**: Active Member | **Derivation**: Read-only (`Cache-Control: no-store`)
 - **Privacy Rules**:
-  - `pendingAmountPaisa`: For treasurers and owners, returns total unverified pending submissions across all active members. For plain members, returns ONLY their own pending submissions (0 if they have none pending). Other members' pending amounts are never leaked.
+  - `pendingAmountPaisa`: Group-wide pending total (one number, no names) is visible to ALL active members, matching the Flutter Home.
   - `needsYourVote`: True if caller is in `eligibleVoters` for an open approval and has not yet voted.
 - **Errors**: 401 `unauthenticated`, 404 `group_not_found`
 - **Response 200**:
@@ -723,7 +723,7 @@ Read-only derivations loaded in one `REPEATABLE READ` snapshot. Financial comput
 - **Replaces**: `ReportsRepository.getMemberReport`
 - **Auth**: Active Member | **Derivation**: Read-only (`Cache-Control: no-store`)
 - **Query Params**: `?month=YYYY-MM` (Required, within group history range).
-- **Privacy Rules**: Plain members see own `pendingPaisa` only; other members' `pendingPaisa` is masked to 0. Totals row matches displayed sum per viewer.
+- **Privacy Rules**: In member rows, a viewer who is neither that member, nor a treasurer, nor the owner receives `null` for that member's `pendingPaisa` (never 0), while the member's status (for example `pendingVerification`) stays visible. Treasurers, owners, and the member themself receive the integer paisa amount. The totals row `pendingTotalPaisa` shows the viewer's own pending total for plain members, or the group pending total for treasurers and owners.
 - **Errors**: 400 `invalid_request`, 400 `report_range_invalid`, 401 `unauthenticated`, 404 `group_not_found`
 - **Response 200**:
   ```json

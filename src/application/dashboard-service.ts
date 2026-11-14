@@ -99,8 +99,6 @@ export async function getDashboardSummary(
     groupId,
     viewerUserId,
     viewerMembershipId,
-    isTreasurer,
-    isOwner,
     now = new Date(),
   } = params;
 
@@ -136,13 +134,11 @@ export async function getDashboardSummary(
   // 2. Financial summaries derived from ledger and submissions
   const verifiedBalance = verifiedBalancePaisa(snapshot.ledgerEntries);
 
-  // Pending amount: plain members see only their own pending; treasurers/owner see all
+  // Pending amount: group-wide pending total (one number, no names) is visible to all active members
   let pendingAmount = 0;
   for (const sub of snapshot.paymentSubmissions) {
     if (sub.status === 'pending' && sub.postedLedgerEntryId === null) {
-      if (isTreasurer || isOwner || sub.memberId === viewerMembershipId) {
-        pendingAmount += sub.amountPaisa;
-      }
+      pendingAmount += sub.amountPaisa;
     }
   }
 
