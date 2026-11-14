@@ -114,15 +114,33 @@ Ordered task breakdown for implementing the Broke Travelers backend API and comp
 
 ---
 
-### Task 5.7: Staging Deployment, Automated Backups & End-to-End Verification
-- **Goal**: Deploy backend service to staging (Render + Neon PostgreSQL), configure connection pooling and cold-start health checks, and configure automated GitHub Actions backups with restore drills.
-- **Deliverables**: Staging deployment config, `/v1/health` endpoint, `.github/workflows/backup.yml` running daily `pg_dump` pushing encrypted artifacts to owner S3/R2 storage, scripted local Docker restore test drill.
-- **Acceptance Tests**: Staging API passes automated integration tests; restore drill successfully recreates database and validates ledger checksums.
-- **Flutter Impact**: Provides live staging API URL for client configuration.
+### Task 5.7: Deployment Preparation — [DONE]
+- **Goal**: Harden the API for a managed-Postgres production environment (Render + Neon) without
+  requiring a live cloud account: pending-amount privacy fix, production env validation, health
+  endpoints, database role scripts, Render/Docker config, GitHub Actions backup workflow, smoke
+  test, and runbook.
+- **Status**: **DONE** (commits `a567149`, `d583a60`, `fc841a5`, `5d5b86c`, `897b4e0`,
+  `bc7f99d` on branch `main`).
+- **Deliverables**:
+  - Pending visibility fix: dashboard group-wide pending total visible to all active members;
+    `GET /reports/members` returns `null` for other members' pending for plain-member viewers.
+  - Production hardening: env validation rejects placeholder/blank values in production; startup
+    DB connectivity retry with exponential back-off; `GET /v1/health` (liveness) and
+    `GET /v1/health/ready` (readiness); helmet, body-size limit, request-id, pino log redaction;
+    `npm run start:prod`; `dotenv` moved to production dependencies.
+  - DB role scripts: `scripts/sql/managed-db-roles.sql` (idempotent, least-privilege `api_user`);
+    `scripts/verify-roles.js`; `npm run db:deploy` and `npm run db:verify-roles`.
+  - Render config: `render.yaml`, multi-stage `Dockerfile`, `.dockerignore`.
+  - Backup workflow: `.github/workflows/backup.yml` (daily 20:45 UTC, `pg_dump -Fc`, GPG-encrypted
+    artifact, 30-day retention); `scripts/restore-drill.ps1` (restore verified PASS locally).
+  - Runbook & smoke test: `docs/runbook.md`; `scripts/smoke-test.ps1` (5/5 PASS vs local server).
+- **Acceptance Tests**: 232 unit (1 skipped), 150 integration — all passing with 0 flakiness.
+- **Flutter Impact**: None (backend standalone).
+- **Next Task**: Task 5.8 (Flutter Client Integration & Incremental Switch-Over).
 
 ---
 
-### Task 5.7: Flutter Client Integration & Incremental Switch-Over
+### Task 5.8: Flutter Client Integration & Incremental Switch-Over
 - **Goal**: Incrementally replace Flutter mock repository providers with API-backed HTTP client implementations, verifying each feature independently.
 - **Deliverables**: HTTP client repositories in `lib/features/*/data/repositories/http_*_repository.dart`; environment-based API base URL configuration; shared contract test verification.
 - **Acceptance Tests**: Full Flutter test suite (`flutter test`) passes green with both mock and HTTP repositories; complete user journey verified on mobile emulator/device.

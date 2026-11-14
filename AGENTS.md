@@ -42,3 +42,38 @@ Backend REST API for Broke Travelers (Node.js, Express, TypeScript, PostgreSQL, 
 
 - TypeScript strict mode enabled (`"strict": true`). No `any` allowed; use explicit types, unknown with narrowing, or discriminated unions.
 - Validate all incoming HTTP payloads at the boundary using a schema validator before passing data to application services.
+
+## Deployment Artifacts (Task 5.7)
+
+The following files were added in Task 5.7 and must be kept consistent:
+
+| File / Script | Purpose |
+|---|---|
+| `render.yaml` | Render web service definition (region, build/start commands, health check path) |
+| `Dockerfile` | Multi-stage production image (builder → runner, `node:22-slim`) |
+| `.dockerignore` | Excludes `node_modules`, `dist`, `.env*`, `test/`, `*.dump`, `*.gpg` |
+| `scripts/sql/managed-db-roles.sql` | Idempotent `api_user` runtime role setup (least-privilege) |
+| `scripts/verify-roles.sql` | DO $$ block — asserts role constraints, raises on failure |
+| `scripts/verify-roles.js` | Node runner for `verify-roles.sql` via `pg` client |
+| `scripts/smoke-test.ps1` | 5-check PowerShell smoke test; use `-BaseUrl` to target any env |
+| `scripts/restore-drill.ps1` | Local restore drill — throwaway Postgres 17 container, schema integrity check |
+| `.github/workflows/backup.yml` | Daily encrypted `pg_dump` backup to GitHub Actions artifact (30-day retention) |
+| `docs/runbook.md` | Deployment, migration, role verification, smoke test, backup, restore procedures |
+
+### npm scripts added in Task 5.7
+
+| Script | Command |
+|---|---|
+| `npm run start:prod` | `node dist/server.js` (production start) |
+| `npm run db:deploy` | `prisma migrate deploy` (apply pending migrations) |
+| `npm run db:verify-roles` | `node scripts/verify-roles.js` (assert least-privilege role) |
+
+### Health endpoints (changed in Task 5.7)
+
+- `GET /v1/health` — **shallow liveness only**: always `200 { status: 'ok' }`, no DB query. Use for load-balancer keepalive.
+- `GET /v1/health/ready` — **deep readiness**: runs `SELECT 1` via Prisma; `200 { status: 'ready' }` or `503 { status: 'unready' }`. Use for Render health check and smoke test.
+
+### Pending-amount privacy (changed in Task 5.7)
+
+- Dashboard `pendingTotal`: group-wide sum of all pending submissions — visible to **all active members**.
+- `GET /reports/members` `pendingPaisa` column: viewers who are plain members (not the subject member, not treasurer, not owner) receive **`null`** (never 0) for other members' pending amounts. The member's status field (e.g. `pending`) is always visible.

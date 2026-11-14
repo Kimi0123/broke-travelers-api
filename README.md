@@ -12,14 +12,15 @@ Broke Travelers is an immutable financial ledger and group transparency recordke
 - **Testing**: Vitest with golden vectors ported from Dart, supertest integration suite
 
 ## Current Status
-**Phase 5.6 complete — Reports, Dashboard Summary & Updates Feed.**
-Express 5 REST API with Firebase ID token authentication, user session provisioning, groups CRUD, single-use invitations with brute-force lockout, member role management, contribution periods, payment submissions & reviews (with separation of duties and reference masking), transactions & reversals, keyset-paginated unified activity (`v_activity_items`), detailed member history, multi-member approval governance workflow, formal bank statement reconciliations at NPT calendar boundaries, dashboard summaries, aggregated reports (selectable months, monthly, member-wise, annual, outflow with reversal netting), and dynamic per-viewer updates notifications feed with persisted read-state tracking. Verified across 226 unit/vector tests (1 skipped) and 146 integration tests across 28 suites against real PostgreSQL.
+**Phase 5.7 complete — Deployment Preparation.**
+Express 5 REST API with Firebase ID token authentication, user session provisioning, groups CRUD, single-use invitations with brute-force lockout, member role management, contribution periods, payment submissions & reviews (with separation of duties and reference masking), transactions & reversals, keyset-paginated unified activity (`v_activity_items`), detailed member history, multi-member approval governance workflow, formal bank statement reconciliations at NPT calendar boundaries, dashboard summaries, aggregated reports (selectable months, monthly, member-wise, annual, outflow with reversal netting), and dynamic per-viewer updates notifications feed with persisted read-state tracking. Production-hardened with startup env validation, liveness/readiness health endpoints, managed database role scripts, Render/Docker deployment config, GitHub Actions encrypted backup workflow, and a PowerShell smoke test + runbook. Verified across 232 unit/vector tests (1 skipped) and 150 integration tests across 28 suites against real PostgreSQL.
 
 ## Implemented Endpoints Reference
 
 | Endpoint | Method | Scope / Roles | Description |
 |---|---|---|---|
-| `/v1/health` | GET | Public | Service health & database connectivity check |
+| `/v1/health` | GET | Public | Shallow liveness check — always 200, no DB query |
+| `/v1/health/ready` | GET | Public | Deep readiness check — 200 when DB reachable, 503 when not |
 | `/v1/session` | POST | Authenticated User | Idempotent user profile provisioning |
 | `/v1/profile` | GET | Authenticated User | Current user profile, active roles, and groups |
 | `/v1/groups` | POST | Authenticated User | Create group (assigns Owner + Treasurer) |
@@ -162,3 +163,54 @@ npm run db:migrate
 - [`docs/api-contract.md`](docs/api-contract.md): Versioned REST API specification (`/v1`) and error envelopes.
 - [`docs/decisions.md`](docs/decisions.md): Architecture recommendations, domain conventions, and security.
 - [`docs/roadmap.md`](docs/roadmap.md): Phased execution roadmap for Phase 5 tasks.
+- [`docs/runbook.md`](docs/runbook.md): Deployment, migration, role verification, smoke test, backup, and restore procedures.
+
+## Deployment
+
+### Render
+
+The service ships with `render.yaml` for one-click Render deployment:
+
+- **Build**: `npm ci && npm run build`
+- **Start**: `npm run start:prod` (`node dist/server.js`)
+- **Health check**: `GET /v1/health/ready` (DB connectivity verified)
+- **Region**: Singapore (configurable in `render.yaml`)
+
+Set all required environment variables (`DATABASE_URL`, `FIREBASE_PROJECT_ID`,
+`FIREBASE_SERVICE_ACCOUNT_JSON`, `TRUST_PROXY_HOPS`, `REQUIRE_VERIFIED_EMAIL`, `LOG_LEVEL`) in
+the Render dashboard. See [`docs/runbook.md`](docs/runbook.md) for the full list.
+
+### Docker
+
+Multi-stage `Dockerfile` — builder compiles TypeScript, runner copies only production artifacts:
+
+```powershell
+docker build -t broke-travelers-api .
+docker run --rm -e NODE_ENV=production broke-travelers-api  # exits with missing-var message
+```
+
+### Database Roles
+
+```powershell
+# Create / update runtime role (idempotent)
+psql -d $env:DIRECT_URL -v "api_password='<password>'" -f scripts/sql/managed-db-roles.sql
+# Verify least-privilege constraints
+npm run db:verify-roles
+```
+
+### Smoke Test
+
+```powershell
+.\scripts\smoke-test.ps1 -BaseUrl https://<your-service>.onrender.com
+```
+
+### Automated Backups
+
+`.github/workflows/backup.yml` runs daily at 02:30 NPT (20:45 UTC), dumps the database with
+`pg_dump -Fc`, encrypts with GPG, and uploads as a GitHub Actions artifact (30-day retention).
+Requires `BACKUP_DATABASE_URL` and `BACKUP_ENCRYPTION_KEY` repository secrets.
+
+Restore drill (local Docker):
+```powershell
+.\scripts\restore-drill.ps1
+```
